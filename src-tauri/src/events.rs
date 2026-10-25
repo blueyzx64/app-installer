@@ -13,7 +13,7 @@ use crate::dto::{Appearance, InstallEvent};
 pub const OPEN_FILE_EVENT: &str = "app://open-file";
 pub const APPEARANCE_CHANGED_EVENT: &str = "appearance://changed";
 
-#[derive(Debug, Clone, Serialize, Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenFilePayload {
     pub path: String,

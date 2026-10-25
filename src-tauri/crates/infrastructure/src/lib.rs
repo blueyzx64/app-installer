@@ -16,5 +16,7 @@
 //! Never depend on `tauri` here. Never execute a package (ADR-0005).
 #![forbid(unsafe_code)]
 
+pub mod file_probe;
+pub mod host;
 pub mod inspect;
 pub mod packagekit; // lane S2

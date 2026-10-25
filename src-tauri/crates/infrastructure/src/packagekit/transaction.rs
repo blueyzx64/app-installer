@@ -119,11 +119,10 @@ struct Shown {
 }
 
 fn to_progress(s: &Shown) -> InstallProgress {
-    // TODO(v2:S1): set `allow_cancel: s.allow_cancel` once InstallProgress carries it (F-28).
     let mut p = InstallProgress::phase(s.phase);
     p.percent = s.percent;
     p.eta_secs = s.eta;
-    p
+    p.with_allow_cancel(s.allow_cancel)
 }
 
 /// Run one operation to `Finished`, forwarding progress and honouring cancel.
@@ -230,6 +229,8 @@ mod tests {
             Step::Event(PkEvent::Status(PkStatus::Download)),
             Step::Event(PkEvent::Percentage(40)),
             Step::Event(PkEvent::RemainingTime(7)),
+            Step::Event(PkEvent::AllowCancel(true)),
+            Step::Event(PkEvent::AllowCancel(false)),
             Step::Event(PkEvent::Status(PkStatus::Install)),
             Step::Event(PkEvent::Percentage(101)),
             Step::Event(PkEvent::Package(PkPackage {
@@ -262,6 +263,8 @@ mod tests {
                 Downloading,
                 Downloading,
                 Downloading,
+                Downloading,
+                Downloading,
                 Installing,
                 Installing,
                 Finishing
@@ -270,7 +273,8 @@ mod tests {
         let p = obs.progress();
         assert_eq!(p[3].percent, Some(40));
         assert_eq!(p[4].eta_secs, Some(7));
-        assert_eq!(p[6].percent, None, "101 is unknown");
+        assert!(p[5].allow_cancel && !p[6].allow_cancel);
+        assert_eq!(p[8].percent, None, "101 is unknown");
         assert!(tx.cancels() == 0);
     }
 

@@ -32,6 +32,9 @@ pub trait SystemPackages: Sync {
         cancel: CancelToken,
     ) -> Result<(), InstallError>;
 
+    /// Simulate the removal. Returns how many other packages would go with it.
+    async fn removal_plan(&self, name: &str) -> Result<u32, BackendError>;
+
     async fn remove(&self, name: &str, observer: &dyn InstallObserver) -> Result<(), InstallError>;
 }
 

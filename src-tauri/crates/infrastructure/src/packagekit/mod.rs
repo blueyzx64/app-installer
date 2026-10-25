@@ -88,24 +88,6 @@ impl<B: PkBus> PackageKitSystemPackages<B> {
             .collect())
     }
 
-    /// How many packages besides the app itself an uninstall would remove (F-42).
-    // TODO(v2:S1): becomes a `SystemPackages` trait method; the signature already matches.
-    pub async fn removal_plan(&self, name: &str) -> Result<u32, BackendError> {
-        let ids = self.installed_ids(name).await?;
-        if ids.is_empty() {
-            return Ok(0);
-        }
-        let report = self
-            .query(PkOp::RemovePackages {
-                flags: flag::SIMULATE,
-                ids: package_id_strings(&ids),
-                allow_deps: false,
-                autoremove: true,
-            })
-            .await?;
-        Ok(mapping::extra_removals(&report.packages))
-    }
-
     /// Trust policy in one place (F-16 will revisit): try trusted first, and
     /// only a missing signature escalates to an untrusted install.
     async fn install_files(
@@ -186,6 +168,23 @@ impl<B: PkBus> SystemPackages for PackageKitSystemPackages<B> {
     ) -> Result<(), InstallError> {
         let path = path_str(file)?;
         self.install_files(path, observer, &cancel).await
+    }
+
+    /// How many packages besides the app itself an uninstall would remove (F-42).
+    async fn removal_plan(&self, name: &str) -> Result<u32, BackendError> {
+        let ids = self.installed_ids(name).await?;
+        if ids.is_empty() {
+            return Ok(0);
+        }
+        let report = self
+            .query(PkOp::RemovePackages {
+                flags: flag::SIMULATE,
+                ids: package_id_strings(&ids),
+                allow_deps: false,
+                autoremove: true,
+            })
+            .await?;
+        Ok(mapping::extra_removals(&report.packages))
     }
 
     async fn remove(&self, name: &str, observer: &dyn InstallObserver) -> Result<(), InstallError> {

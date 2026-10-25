@@ -22,7 +22,12 @@
   interface Props {
     appName: string;
     iconUrl?: string | null;
-    phase: ProgressPhase;
+    /** Used when `phaseText` is not given. */
+    phase?: ProgressPhase;
+    /** Phase line already resolved by the controller ("Installing Lumen Notes…"). Wins over `phase`. */
+    phaseText?: string;
+    /** Time-left line already resolved by the controller. Wins over `etaSeconds`. */
+    etaText?: string;
     /** 0 to 100, or null when the amount is not known. */
     percent: number | null;
     etaSeconds?: number | null;
@@ -33,13 +38,16 @@
   let {
     appName,
     iconUrl = null,
-    phase,
+    phase = 'preparing',
+    phaseText: phaseOverride,
+    etaText: etaOverride,
     percent,
     etaSeconds = null,
     sizeLabel = null
   }: Props = $props();
 
-  const phaseText = $derived.by(() => {
+  const phaseLine = $derived.by(() => {
+    if (phaseOverride !== undefined) return phaseOverride;
     switch (phase) {
       case 'preparing':
         return t('phase.preparing');
@@ -54,7 +62,8 @@
     }
   });
 
-  const etaText = $derived.by(() => {
+  const etaLine = $derived.by(() => {
+    if (etaOverride !== undefined) return etaOverride;
     if (phase === 'finishing') return '';
     const { key, n } = etaPhrase(etaSeconds);
     return key === 'eta.minutes' ? t(key, { n: n ?? 0 }) : t(key);
@@ -67,8 +76,8 @@
   <div class="wrap">
     <ProgressBar value={percent} label={t('progress.label')} />
     <div class="meta">
-      <span class="phase" aria-live="polite">{phaseText}</span>
-      <span class="eta tabular">{etaText}</span>
+      <span class="phase" aria-live="polite">{phaseLine}</span>
+      <span class="eta tabular">{etaLine}</span>
     </div>
   </div>
 </div>

@@ -1,175 +1,89 @@
 # Folder Structure
 
-This is the target layout once the project is scaffolded (milestone M0). Items marked ✅ exist now. Everything else is the plan. Create files in these places and nowhere else. If you need a new top-level folder, add an ADR first.
+This page shows the layout as built on the integration branch, then what is still planned. Items under "Planned" do not exist yet. Create files in the places shown and nowhere else. If you need a new top-level folder, add an ADR first.
+
+## As built ✅
 
 ```
 app-installer/
-├─ CLAUDE.md                         ✅ rules for AI-assisted development (read first)
-├─ README.md                         ✅
-├─ .editorconfig  .gitignore         ✅
-├─ .claude/
-│  └─ skills/                        ✅ task-specific guides for Claude Code (see §Skills)
+├─ CLAUDE.md  README.md  start-workflow.md
+├─ .editorconfig  .gitignore  .prettierrc  .prettierignore
+├─ .claude/skills/                   task-specific guides for Claude Code
 ├─ .github/
-│  ├─ pull_request_template.md       ✅
-│  └─ workflows/
-│     ├─ ci.yml                      lint + test (frontend + Rust), bindings drift check
-│     ├─ release.yml                 tagged build → .rpm / .AppImage → GitHub Release
-│     └─ e2e-nightly.yml             tauri-driver on Fedora
-├─ docs/                             ✅
-│  ├─ architecture/                  ✅ ARCHITECTURE, folder-structure, ipc-contract, state-machines
-│  ├─ adr/                           ✅ numbered decision records
-│  ├─ product/                       ✅ FEATURES, ROADMAP
-│  ├─ design/                        ✅ DESIGN-SYSTEM, COPY
-│  ├─ platform/                      ✅ fedora-gnome notes
-│  ├─ DEVELOPMENT.md                 ✅ machine setup + commands
-│  └─ handoff/                       ✅ original handoff (historical; don't edit)
-├─ design/
-│  └─ prototype/                     ✅ interactive HTML prototype (reference for UI and motion)
+│  ├─ pull_request_template.md
+│  └─ workflows/{ci.yml,release.yml}
+├─ docs/                             architecture, adr, product, design, platform, DEVELOPMENT.md, handoff (historical)
+├─ design/prototype/                 interactive HTML prototype
+├─ scripts/                          Node helpers run by `pnpm lint:copy` and `pnpm test`
+│  ├─ lint-copy.mjs  lint-copy.allow.json  lint-copy.test.mjs   banned-word check over en.json
+│  └─ eslint-boundaries.test.mjs     checks the TS dependency rule
+├─ package.json  pnpm-lock.yaml  svelte.config.js  vite.config.ts  tsconfig.json  eslint.config.js
 │
-├─ package.json  pnpm-lock.yaml
-├─ svelte.config.js                  adapter-static, fallback: 'index.html'
-├─ vite.config.ts                    port 1420, strictPort, clearScreen false, envPrefix VITE_/TAURI_
-├─ tsconfig.json                     strict, noUncheckedIndexedAccess
-├─ eslint.config.js  .prettierrc
-├─ playwright.config.ts
+├─ src/                              FRONTEND (SvelteKit SPA)
+│  ├─ app.html  app.d.ts
+│  ├─ routes/{+layout.ts,+layout.svelte,+page.svelte,install/[[previewId]]/+page.svelte,library/+page.svelte}
+│  └─ lib/
+│     ├─ app/{context.ts,env.ts}
+│     ├─ core/
+│     │  ├─ domain/{types,installer-machine,library-machine,default-prompt-machine,format}.ts (+ tests)
+│     │  ├─ ports/index.ts           all gateway interfaces live in this one file for now
+│     │  └─ copy/copy.ts
+│     ├─ infrastructure/
+│     │  ├─ tauri/{bindings.ts (generated),invoke.ts,index.ts,installer-gateway.ts,library-gateway.ts,defaults-gateway.ts,appearance-gateway.ts,window-gateway.ts}
+│     │  └─ mock/{index.ts,fixtures.ts,scenario.ts,install-script.ts}
+│     ├─ features/
+│     │  ├─ installer/              controller, DmgView, DraggableAppIcon, ApplicationsFolder, PermissionShade, ProgressView, DoneView, IncompatibleView, use-drag
+│     │  ├─ library/LibraryController.svelte.ts
+│     │  └─ default-handler/DefaultHandlerController.svelte.ts
+│     ├─ ui/                        Alert, AppIcon, Button, Disclosure, ProgressBar, Sheet, Spinner, Toast, icons/, focus.ts, motion.ts, tokens.css, base.css
+│     ├─ i18n/{en.json,index.ts}
+│     └─ assets/fonts/              bundled Inter
 │
-├─ src/                              ── FRONTEND (SvelteKit SPA)
-│  ├─ app.html
-│  ├─ app.d.ts
-│  ├─ routes/
-│  │  ├─ +layout.ts                  export const ssr = false; export const prerender = false
-│  │  ├─ +layout.svelte              composition root: gateways, AppearanceStore, <WindowChrome>
-│  │  ├─ +page.svelte                decides: launch file → /install, else → /library
-│  │  ├─ install/[[previewId]]/+page.svelte
-│  │  └─ library/+page.svelte
-│  ├─ lib/
-│  │  ├─ app/
-│  │  │  ├─ context.ts               provideGateways / useGateways (Svelte context)
-│  │  │  └─ env.ts                   isTauri(), mock switch
-│  │  ├─ core/                       ── no Svelte, no @tauri-apps imports
-│  │  │  ├─ domain/
-│  │  │  │  ├─ types.ts              re-exports DTO types from bindings + UI-only types
-│  │  │  │  ├─ installer-machine.ts  pure reducer (see state-machines.md)
-│  │  │  │  ├─ library-machine.ts
-│  │  │  │  ├─ format.ts             bytes, durations ("About a minute left")
-│  │  │  │  └─ *.test.ts
-│  │  │  ├─ ports/
-│  │  │  │  ├─ installer-gateway.ts
-│  │  │  │  ├─ library-gateway.ts
-│  │  │  │  ├─ defaults-gateway.ts
-│  │  │  │  ├─ appearance-gateway.ts
-│  │  │  │  └─ window-gateway.ts     close, minimize, startDragging
-│  │  │  └─ copy/
-│  │  │     ├─ copy.ts               phase/error/compat → i18n key + params
-│  │  │     └─ copy.test.ts
-│  │  ├─ infrastructure/             ── the ONLY place importing @tauri-apps/*
-│  │  │  ├─ tauri/
-│  │  │  │  ├─ bindings.ts           GENERATED by tauri-specta (do not edit)
-│  │  │  │  ├─ installer-gateway.ts
-│  │  │  │  ├─ library-gateway.ts
-│  │  │  │  ├─ defaults-gateway.ts
-│  │  │  │  ├─ appearance-gateway.ts
-│  │  │  │  └─ window-gateway.ts
-│  │  │  └─ mock/
-│  │  │     ├─ fixtures.ts           Lumen Notes .rpm/.deb/.AppImage, error scenarios
-│  │  │     └─ *-gateway.ts          timer-driven fakes (ported from prototype)
-│  │  ├─ features/
-│  │  │  ├─ installer/
-│  │  │  │  ├─ InstallerController.svelte.ts
-│  │  │  │  ├─ DmgView.svelte        icon → arrow → Applications
-│  │  │  │  ├─ DraggableAppIcon.svelte
-│  │  │  │  ├─ ApplicationsFolder.svelte
-│  │  │  │  ├─ PermissionShade.svelte  "Waiting for permission…" dim
-│  │  │  │  ├─ ProgressView.svelte
-│  │  │  │  ├─ DoneView.svelte
-│  │  │  │  ├─ IncompatibleView.svelte
-│  │  │  │  └─ use-drag.svelte.ts    pointer-capture drag + hit test (attachment/action)
-│  │  │  ├─ library/
-│  │  │  │  ├─ LibraryController.svelte.ts
-│  │  │  │  ├─ AppGrid.svelte
-│  │  │  │  ├─ AppTile.svelte
-│  │  │  │  └─ TrashConfirmAlert.svelte
-│  │  │  ├─ default-handler/
-│  │  │  │  ├─ DefaultHandlerController.svelte.ts
-│  │  │  │  └─ DefaultPromptSheet.svelte
-│  │  │  └─ appearance/
-│  │  │     └─ AppearanceStore.svelte.ts  → CSS vars + data-* on <html>
-│  │  ├─ ui/                         ── design system (AppKit-inspired primitives)
-│  │  │  ├─ tokens.css               colors, type, radii, shadows, motion (light/dark/contrast)
-│  │  │  ├─ base.css                 resets, focus ring, font-face (bundled Inter)
-│  │  │  ├─ WindowChrome.svelte      title bar + WindowControls + drag region
-│  │  │  ├─ WindowControls.svelte    traffic lights, placed per button-layout
-│  │  │  ├─ Sheet.svelte             slides from title bar (NSWindow sheet)
-│  │  │  ├─ Alert.svelte             centred modal alert (NSAlert)
-│  │  │  ├─ Button.svelte            push button: primary / secondary / destructive
-│  │  │  ├─ ProgressBar.svelte       determinate + indeterminate (NSProgressIndicator)
-│  │  │  ├─ Spinner.svelte
-│  │  │  ├─ Toast.svelte             notification banner (in-window)
-│  │  │  ├─ AppIcon.svelte           squircle mask + fallback glyph
-│  │  │  ├─ Disclosure.svelte        "Details" (technical info, hidden by default)
-│  │  │  └─ motion.ts                spring presets (svelte/motion Spring)
-│  │  ├─ i18n/
-│  │  │  ├─ en.json
-│  │  │  └─ index.ts                 t(key, params)
-│  │  └─ assets/
-│  │     ├─ fonts/Inter-*.woff2      bundled (CSP forbids remote fonts)
-│  │     └─ icons/                   SVG symbols (folder, arrow, lock, generic app)
-│  └─ tests/                         (optional) shared test utils
-├─ e2e/                              Playwright specs (mock gateways)
-│  ├─ install-appimage.spec.ts
-│  ├─ install-rpm.spec.ts
-│  ├─ incompatible.spec.ts
-│  └─ library-trash.spec.ts
-│
-└─ src-tauri/                        ── BACKEND (Cargo workspace root)
-   ├─ Cargo.toml                     [workspace] members = [".", "crates/*"]; [package] installer
-   ├─ build.rs                       tauri_build::build()
-   ├─ tauri.conf.json
-   ├─ capabilities/
-   │  ├─ main.json                   window "main": minimal permissions
-   │  └─ library.json
-   ├─ icons/
-   ├─ linux/
-   │  ├─ installer.desktop           custom template (MimeType=, Exec=… %f)
-   │  └─ <app-id>.metainfo.xml       AppStream
-   ├─ src/                           ── interface adapters + composition root
-   │  ├─ main.rs
-   │  ├─ lib.rs
-   │  ├─ composition.rs
-   │  ├─ state.rs
-   │  ├─ cli.rs
-   │  ├─ dto.rs
-   │  ├─ error.rs
-   │  ├─ events.rs
-   │  ├─ bindings.rs                 tauri-specta export (debug builds / `cargo run --bin export-bindings`)
-   │  └─ commands/{package,install,library,defaults,appearance}.rs
+└─ src-tauri/                        BACKEND (Cargo workspace root)
+   ├─ Cargo.toml  Cargo.lock  build.rs  tauri.conf.json
+   ├─ capabilities/main.json
+   ├─ icons/  linux/{installer.desktop,io.github.blueyzx64.Installer.metainfo.xml}
+   ├─ src/                           interface adapters + composition root
+   │  ├─ main.rs lib.rs composition.rs state.rs cli.rs dto.rs error.rs events.rs bindings.rs
+   │  ├─ bin/export-bindings.rs      used by `pnpm bindings`
+   │  └─ commands/{mod,package,install,library,defaults,appearance}.rs
    └─ crates/
-      ├─ domain/                     installer-domain
-      │  └─ src/{lib,package,format,version,compat,host,install,app,error}.rs
-      ├─ application/                installer-application
-      │  └─ src/
-      │     ├─ lib.rs
-      │     ├─ ports/{inspector,system_packages,user_apps,desktop,defaults,ledger,launcher,appearance,observer}.rs
-      │     ├─ use_cases/{open_package,install_package,cancel_install,list_installed,uninstall_app,launch_app,default_handler,appearance}.rs
-      │     ├─ preview_registry.rs
-      │     └─ testing/              fakes for every port (feature = "testing")
-      └─ infrastructure/             installer-infrastructure
-         ├─ src/
-         │  ├─ lib.rs
-         │  ├─ inspect/{mod,rpm,deb,appimage,elf}.rs
-         │  ├─ host/os_release.rs
-         │  ├─ packagekit/{mod,proxy,enums,transaction,mapping}.rs
-         │  ├─ dnf5daemon/{mod,proxy,mapping}.rs        (feature = "dnf5daemon")
-         │  ├─ appimage_store.rs
-         │  ├─ desktop_entries.rs
-         │  ├─ defaults.rs
-         │  ├─ ledger.rs
-         │  ├─ launcher.rs
-         │  └─ appearance.rs
-         └─ tests/
-            ├─ fixtures/             tiny packages + script to regenerate them
-            └─ integration/          #[ignore] D-Bus tests (run in Fedora container)
+      ├─ domain/src/{lib,package,version,compat,host,install,app,appearance,preview,error}.rs
+      ├─ application/src/
+      │  ├─ lib.rs  registry.rs      preview registry (was planned as preview_registry.rs)
+      │  ├─ ports/{packages,host,desktop,ledger,files,appearance}.rs
+      │  ├─ use_cases/{open_package,install_package,cancel_install,list_installed,uninstall_app,launch_app,default_handler,appearance}.rs
+      │  └─ testing/mod.rs           fakes for every port
+      └─ infrastructure/src/{lib.rs,inspect/mod.rs}
 ```
+
+Differences from the original plan:
+
+- Ports are fewer, larger files. `packages.rs` holds `SystemPackages`, `UserApps` and the inspector. `files.rs` holds the `FileProbe` port. `desktop.rs` also covers defaults and launching.
+- The preview registry is `registry.rs`, not `preview_registry.rs`.
+- Domain has no `format.rs`. The package format lives in `package.rs`. `preview.rs` is new.
+- All TS gateway interfaces are in `core/ports/index.ts`. The plan has one file per gateway. Contracts v2 adds `files-gateway.ts` as its own file.
+- `scripts/` is new. It holds the copy linter and the dependency-rule test.
+- Mock gateways are assembled in `mock/index.ts` with `scenario.ts` and `install-script.ts`, not as separate `*-gateway.ts` files.
+
+## Planned (expansion lanes, contracts v2) and not in the tree yet
+
+| Path | Purpose | Feature |
+|---|---|---|
+| `src-tauri/src/logging.rs` | log to stderr and `$XDG_STATE_HOME/<app-id>/log/` | F-60 |
+| `src-tauri/src/dropzone.rs` | listens to the window drag-drop event and emits `app://open-file` | F-06 |
+| `src-tauri/src/commands/files.rs` | `pick_package` command (file chooser) | F-07 |
+| `src/lib/core/ports/files-gateway.ts`, `infrastructure/{tauri,mock}/files-gateway.ts` | `FilesGateway.pickPackage()` | F-07 |
+| `application/src/use_cases/uninstall_plan.rs` | `UninstallPlan` use case, `SystemPackages::removal_plan` | F-42 |
+| `infrastructure/src/file_probe.rs` | real `FileProbe` | F-03 |
+| `infrastructure/src/host/` | real `HostProbe` (os-release, arch, libfuse2) | |
+| `infrastructure/src/{packagekit,dnf5daemon}/` | system package backends | F-23, F-24, F-27, F-28, F-30, F-31, F-42 |
+| `infrastructure/src/inspect/{rpm,deb,appimage,elf}.rs` | package readers (never execute, ADR-0005) | F-04, F-05, F-08, F-09 |
+| `infrastructure/src/{appimage_store,desktop_entries,defaults,ledger,launcher,appearance}.rs` | user-scope install and desktop integration | |
+| `src/lib/features/library/{AppGrid,AppTile,TrashConfirmAlert}.svelte` | library views | F-40 to F-43 |
+| `src/lib/features/default-handler/DefaultPromptSheet.svelte` | first-launch prompt | F-50 |
+| `src/lib/features/appearance/`, `ui/Window{Chrome,Controls}.svelte` | GNOME appearance and window controls | |
+| `capabilities/library.json`, `.github/workflows/e2e-nightly.yml`, `e2e/`, `playwright.config.ts` | end-to-end tests | M5 |
 
 ## Placement rules (quick reference)
 

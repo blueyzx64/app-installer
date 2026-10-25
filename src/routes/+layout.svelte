@@ -1,6 +1,7 @@
 <script lang="ts">
   // Composition root: picks the gateways (Tauri in the app, mock in a plain browser) and
   // provides them plus the feature controllers to the whole tree.
+  import '$lib/ui/base.css';
   import { createControllers, provideControllers, provideGateways } from '$lib/app/context';
   import { isTauri } from '$lib/app/env';
   import { createMockGateways } from '$lib/infrastructure/mock';

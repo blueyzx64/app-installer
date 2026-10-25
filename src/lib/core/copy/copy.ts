@@ -50,6 +50,39 @@ export function etaCopy(etaSecs: number | null): Msg {
   }
 }
 
+/** Which incompatible screen to show. null = installable. Mirrors `compatCopy`. */
+export type CompatKind =
+  | 'wrongFamily.debBased'
+  | 'wrongFamily.rpmBased'
+  | 'wrongArch'
+  | 'alreadyInstalled.same'
+  | 'alreadyInstalled.older'
+  | 'missingRuntime.fuse2'
+  | 'unsupported';
+
+export function compatKind(compat: Compatibility): CompatKind | null {
+  switch (compat.kind) {
+    case 'ok':
+      return null;
+    case 'wrongFamily':
+      return compat.madeFor === 'debBased' ? 'wrongFamily.debBased' : 'wrongFamily.rpmBased';
+    case 'wrongArch':
+      return 'wrongArch';
+    case 'alreadyInstalled':
+      return compat.relation === 'same'
+        ? 'alreadyInstalled.same'
+        : compat.relation === 'older'
+          ? 'alreadyInstalled.older'
+          : null;
+    case 'missingRuntime':
+      return 'missingRuntime.fuse2';
+    case 'unsupported':
+      return 'unsupported';
+    default:
+      return assertNever(compat);
+  }
+}
+
 export interface CompatCopy {
   title: Msg;
   /** null when there is no body line. */
@@ -192,6 +225,14 @@ export interface TrashCopy {
   cancel: Msg;
   /** System packages ask for a password, user apps go to the Trash. */
   system: boolean;
+}
+
+/** Second line of the alert. null = nothing else goes with the app. Plural: 1 item, N items. */
+export function extrasCopy(app: string, alsoRemoves: number): Msg | null {
+  if (alsoRemoves <= 0) return null;
+  return alsoRemoves === 1
+    ? { key: 'trash.body.extras.one', params: { app } }
+    : { key: 'trash.body.extras', params: { app, n: alsoRemoves } };
 }
 
 export function trashCopy(app: Pick<InstalledApp, 'displayName' | 'source'>): TrashCopy {
