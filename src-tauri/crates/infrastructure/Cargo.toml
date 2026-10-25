@@ -8,4 +8,13 @@ description = "Adapters that implement the application ports (PackageKit, AppIma
 [dependencies]
 installer-domain.workspace = true
 installer-application.workspace = true
+# lane S2 (PackageKit)
+zbus = { version = "5", default-features = false, features = ["tokio"] }
+tokio = { workspace = true, features = ["sync", "rt", "macros", "time"] }
+futures-util = { version = "0.3", default-features = false }
+tracing.workspace = true
 # Lanes B and C add zbus, backhand, rpm, gio, ashpd, tokio, serde_json here.
+
+[dev-dependencies]
+installer-application = { workspace = true, features = ["testing"] }
+tokio = { workspace = true, features = ["sync", "rt", "macros", "time", "test-util"] }

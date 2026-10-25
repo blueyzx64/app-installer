@@ -17,3 +17,4 @@
 #![forbid(unsafe_code)]
 
 pub mod inspect;
+pub mod packagekit; // lane S2
