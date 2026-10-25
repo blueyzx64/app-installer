@@ -1,23 +1,23 @@
 import type { InstallEvent, InstallOutcome, PackagePreview } from '../../core/domain/types';
 import type { InstallerGateway } from '../../core/ports';
-import { call, channel, subscribe } from './invoke';
+import { commands } from './bindings';
+import { channel, guard, guardVoid, subscribe } from './invoke';
 
-// TODO(S4-bindings): swap raw invoke for generated `commands.*` and DTO types.
 export class TauriInstallerGateway implements InstallerGateway {
   takeLaunchFile(): Promise<string | null> {
-    return call<string | null>('take_launch_file');
+    return guard(commands.takeLaunchFile());
   }
 
   openPackage(path: string): Promise<PackagePreview> {
-    return call<PackagePreview>('open_package', { path });
+    return guard(commands.openPackage(path));
   }
 
   install(previewId: string, onEvent: (e: InstallEvent) => void): Promise<InstallOutcome> {
-    return call<InstallOutcome>('install', { previewId, onEvent: channel<InstallEvent>(onEvent) });
+    return guard(commands.install(previewId, channel<InstallEvent>(onEvent)));
   }
 
   cancelInstall(previewId: string): Promise<void> {
-    return call<void>('cancel_install', { previewId });
+    return guardVoid(commands.cancelInstall(previewId));
   }
 
   onOpenFile(cb: (path: string) => void): () => void {

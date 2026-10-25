@@ -1,11 +1,11 @@
 import type { Appearance } from '../../core/domain/types';
 import type { AppearanceGateway } from '../../core/ports';
-import { call, subscribe } from './invoke';
+import { commands } from './bindings';
+import { guard, subscribe } from './invoke';
 
-// TODO(S4-bindings): swap raw invoke for generated `commands.*` and DTO types.
 export class TauriAppearanceGateway implements AppearanceGateway {
   get(): Promise<Appearance> {
-    return call<Appearance>('get_appearance');
+    return guard(commands.getAppearance());
   }
 
   onChange(cb: (a: Appearance) => void): () => void {

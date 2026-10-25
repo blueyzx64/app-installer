@@ -1,15 +1,20 @@
-// Thin wrapper over @tauri-apps/api so every gateway rejects with a CommandError.
-// TODO(S4-bindings): when bindings.ts carries all commands, call `commands.*` instead of raw invoke.
-import { Channel, invoke } from '@tauri-apps/api/core';
+// Helpers over the generated bindings. Wrappers throw CommandError (D-013); guard() normalises
+// anything else (plain strings, Errors) into one so controllers can rely on the shape.
+import { Channel } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { toCommandError } from '../../core/domain/types';
 
-export async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+export async function guard<T>(p: Promise<T>): Promise<T> {
   try {
-    return await invoke<T>(cmd, args);
+    return await p;
   } catch (e) {
     throw toCommandError(e);
   }
+}
+
+/** guard() for commands that return nothing (specta gives `null`). */
+export async function guardVoid(p: Promise<unknown>): Promise<void> {
+  await guard(p);
 }
 
 /** A Tauri Channel that forwards each message to `onMessage`. */
