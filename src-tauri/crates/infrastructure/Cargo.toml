@@ -13,10 +13,10 @@ rpm = { version = "0.30.2", default-features = false, features = ["gzip-compress
 flate2 = "1.1.10"
 liblzma = "0.4.9"
 zstd = "0.14.3"
-tokio = { version = "1", features = ["rt"] }
+tokio = { workspace = true, features = ["rt"] } # lane S2b: spawn_blocking
 # Lanes B and C add zbus, backhand, gio, ashpd, serde_json here.
 
 [dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
 # lane S2b: builds tiny .rpm fixtures in tests
 rpm = { version = "0.30.2", default-features = false, features = ["payload", "gzip-compression", "xz-compression", "zstd-compression"] }
-tokio = { version = "1", features = ["rt", "macros"] }

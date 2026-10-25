@@ -161,13 +161,12 @@ fn icon_rank(path: &str) -> Option<(IconKind, u8)> {
             _ => return None,
         };
         (kind, rank)
-    } else if let Some(file) = rest.strip_prefix("pixmaps/") {
+    } else {
+        let file = rest.strip_prefix("pixmaps/")?;
         if file.contains('/') || !file.ends_with(".png") {
             return None;
         }
         (IconKind::Png, 5)
-    } else {
-        return None;
     };
     Some((kind, rank))
 }
