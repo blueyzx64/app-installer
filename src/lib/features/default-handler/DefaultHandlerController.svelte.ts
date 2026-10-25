@@ -50,6 +50,12 @@ export class DefaultHandlerController {
       }, CONFIRMED_MS);
     } catch {
       this.#dispatch({ type: 'APPLY_FAILED' }); // silent
+      // "Once": a failed try still counts as asked, so the sheet does not return every launch.
+      try {
+        await this.#gw.defaults.dismissPrompt();
+      } catch {
+        // best effort
+      }
     }
   }
 

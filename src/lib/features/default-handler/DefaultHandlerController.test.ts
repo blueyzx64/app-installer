@@ -56,6 +56,14 @@ describe('DefaultHandlerController', () => {
     expect(c.state.tag).toBe('hidden');
     expect(c.toastVisible).toBe(false);
   });
+  it('apply failure is remembered as asked (no nagging every launch)', async () => {
+    const { c, gw } = setup();
+    gw.defaults.makeDefault = () => Promise.reject(new Error('x'));
+    await c.check();
+    await c.makeDefault();
+    expect(gw.controls.defaults.askedBefore).toBe(true);
+    expect(c.state.tag).toBe('hidden');
+  });
   it('status failure hides', async () => {
     const { c, gw } = setup();
     gw.defaults.status = () => Promise.reject(new Error('x'));
