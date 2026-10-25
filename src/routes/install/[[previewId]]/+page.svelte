@@ -15,8 +15,6 @@
   import Toast from '$lib/ui/Toast.svelte';
 
   const { installer, defaultHandler } = useControllers();
-
-  $effect(() => installer.start());
 </script>
 
 <main class="install" data-state={installer.state.tag}>
@@ -35,10 +33,9 @@
     <ProgressView
       appName={installer.appName}
       iconUrl={installer.iconUrl}
-      phase={installer.phase}
+      phaseText={installer.phaseText}
+      etaText={installer.etaText}
       percent={installer.percent}
-      etaSeconds={installer.etaSecs}
-      sizeLabel={installer.sizeLabel}
     />
   {:else if installer.state.tag === 'succeeded'}
     <DoneView
@@ -50,7 +47,8 @@
     />
   {:else if installer.incompatibleKind}
     <IncompatibleView
-      kind={installer.incompatibleKind}
+      title={installer.incompatible?.title}
+      body={installer.incompatible?.body ?? null}
       appName={installer.appName}
       iconUrl={installer.iconUrl}
       canOpen={installer.incompatible?.action === 'open'}

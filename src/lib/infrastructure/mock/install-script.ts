@@ -49,6 +49,16 @@ export function installScript(
   scenario: Scenario,
   done: InstallOutcome
 ): ScriptStep<InstallOutcome>[] {
+  if (format === 'appImage' && scenario === 'null-percent') {
+    // Amount unknown: the bar stays indeterminate until the last step.
+    return [
+      progress(0, 'preparing', null, null),
+      progress(400, 'installing', null, null),
+      progress(1200, 'installing', null, null),
+      progress(2200, 'finishing', 100, null),
+      { at: 2600, outcome: done }
+    ];
+  }
   if (format === 'appImage') {
     return [
       progress(0, 'preparing', 0, null),

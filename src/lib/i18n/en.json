@@ -42,7 +42,7 @@
   "compat.alreadyInstalled.older.title": "A newer version of {app} is already installed",
   "compat.alreadyInstalled.older.body": "You don’t need to do anything.",
   "compat.missingRuntime.fuse2.title": "{app} needs something your computer doesn’t have",
-  "compat.missingRuntime.fuse2.body": "Ask for help installing “FUSE 2 support”, or get a different version of this app.",
+  "compat.missingRuntime.fuse2.body": "Ask someone to help you add a missing piece of system software, or get a different version of this app.",
   "compat.unsupported.title": "This file can’t be opened",
   "compat.unsupported.body": "It may be an older or unusual kind of app file.",
 

@@ -47,7 +47,7 @@ All strings live in `src/lib/i18n/en.json`. `core/copy/copy.ts` maps domain enum
 | `wrongArch` | {app} can't be installed here | This version was made for a different kind of processor. |
 | `alreadyInstalled.same` | {app} is already installed | (button **Open**) |
 | `alreadyInstalled.older` | A newer version of {app} is already installed | You don't need to do anything. |
-| `missingRuntime.fuse2` | {app} needs something your computer doesn't have | Ask for help installing "FUSE 2 support", or get a different version of this app. |
+| `missingRuntime.fuse2` | {app} needs something your computer doesn't have | Ask someone to help you add a missing piece of system software, or get a different version of this app. |
 | `unsupported` | This file can't be opened | It may be an older or unusual kind of app file. |
 
 ## Errors (`ErrorCode` → text + action)
@@ -66,6 +66,15 @@ All strings live in `src/lib/i18n/en.json`. `core/copy/copy.ts` maps domain enum
 | `unknown` | Something went wrong while installing {app}. | Try Again |
 
 Every error view has a collapsed **Details** disclosure with the technical code, the backend message and the log path. That is the only place technical text appears.
+
+## Package waiting
+
+Shown as a toast when another package is opened while one is being dragged or installed.
+
+| Key | Text |
+|---|---|
+| `queue.title` | Another app is waiting |
+| `queue.body` | It will open as soon as this one is done. |
 
 ## Default handler sheet
 

@@ -9,6 +9,9 @@ export const SCENARIOS = [
   'fail-offline',
   'cancel-permission',
   'missing-fuse2',
+  'wrong-family',
+  'older-installed',
+  'null-percent',
   'empty-library'
 ] as const;
 
