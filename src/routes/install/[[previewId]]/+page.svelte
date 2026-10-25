@@ -33,9 +33,9 @@
     <ProgressView
       appName={installer.appName}
       iconUrl={installer.iconUrl}
+      percent={installer.percent}
       phaseText={installer.phaseText}
       etaText={installer.etaText}
-      percent={installer.percent}
     />
   {:else if installer.state.tag === 'succeeded'}
     <DoneView
@@ -45,13 +45,12 @@
       onopen={() => installer.openApp()}
       ondone={() => installer.close()}
     />
-  {:else if installer.incompatibleKind}
+  {:else if installer.incompatible}
     <IncompatibleView
-      title={installer.incompatible?.title}
-      body={installer.incompatible?.body ?? null}
-      appName={installer.appName}
+      title={installer.incompatible.title}
+      body={installer.incompatible.body}
       iconUrl={installer.iconUrl}
-      canOpen={installer.incompatible?.action === 'open'}
+      canOpen={installer.incompatible.action === 'open'}
       onclose={() => installer.close()}
       onopen={() => installer.openInstalled()}
     />

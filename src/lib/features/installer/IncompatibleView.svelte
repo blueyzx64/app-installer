@@ -1,56 +1,23 @@
-<script lang="ts" module>
-  export type IncompatibleKind =
-    | 'wrongFamily.debBased'
-    | 'wrongFamily.rpmBased'
-    | 'wrongArch'
-    | 'alreadyInstalled.same'
-    | 'alreadyInstalled.older'
-    | 'missingRuntime.fuse2'
-    | 'unsupported';
-</script>
-
 <script lang="ts">
   import { t } from '$lib/i18n';
   import AppIcon from '$lib/ui/AppIcon.svelte';
   import Button from '$lib/ui/Button.svelte';
   import { focusOnMount } from '$lib/ui/focus';
 
-  /** "Can't install this" and "already installed" screen. Calm, no technical words. */
+  /** "Can't install this" and "already installed" screen. Renders the controller's text. */
   interface Props {
-    /** Used when `title` is not given. */
-    kind?: IncompatibleKind;
-    /** Text already resolved by the controller. Wins over `kind`. */
-    title?: string;
+    title: string;
     body?: string | null;
-    appName: string;
     iconUrl?: string | null;
-    /** Offered only for "already installed, same version". */
+    /** Offer Open (controller: action === 'open'). */
     canOpen?: boolean;
     onclose: () => void;
     onopen?: () => void;
   }
 
-  let {
-    kind,
-    title: titleOverride,
-    body: bodyOverride,
-    appName,
-    iconUrl = null,
-    canOpen = false,
-    onclose,
-    onopen
-  }: Props = $props();
+  let { title, body = null, iconUrl = null, canOpen = false, onclose, onopen }: Props = $props();
 
-  const title = $derived(
-    titleOverride ?? (kind ? t(`compat.${kind}.title`, { app: appName }) : '')
-  );
-  const body = $derived(
-    bodyOverride !== undefined ? bodyOverride : kind ? t(`compat.${kind}.body`) : ''
-  );
-  // canOpen is the controller's decision (action === 'open'); with only `kind`, restrict to same-version.
-  const offerOpen = $derived(
-    canOpen && !!onopen && (kind === undefined || kind === 'alreadyInstalled.same')
-  );
+  const offerOpen = $derived(canOpen && !!onopen);
 
   function onkeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {

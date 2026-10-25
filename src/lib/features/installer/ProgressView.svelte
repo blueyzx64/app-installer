@@ -1,73 +1,19 @@
-<script lang="ts" module>
-  export type ProgressPhase =
-    'preparing' | 'waitingForPermission' | 'downloading' | 'installing' | 'finishing';
-
-  /** Picks the time-left phrase key and its parameters from a number of seconds. */
-  export function etaPhrase(seconds: number | null): {
-    key: 'eta.seconds' | 'eta.minute' | 'eta.minutes' | 'eta.unknown';
-    n?: number;
-  } {
-    if (seconds === null || !Number.isFinite(seconds) || seconds < 0) return { key: 'eta.unknown' };
-    if (seconds < 45) return { key: 'eta.seconds' };
-    if (seconds < 90) return { key: 'eta.minute' };
-    return { key: 'eta.minutes', n: Math.round(seconds / 60) };
-  }
-</script>
-
 <script lang="ts">
-  import { t } from '$lib/i18n';
   import AppIcon from '$lib/ui/AppIcon.svelte';
   import ProgressBar from '$lib/ui/ProgressBar.svelte';
+  import { t } from '$lib/i18n';
 
+  /** Renders only the text the controller gives it. */
   interface Props {
     appName: string;
     iconUrl?: string | null;
-    /** Used when `phaseText` is not given. */
-    phase?: ProgressPhase;
-    /** Phase line already resolved by the controller ("Installing Lumen Notes…"). Wins over `phase`. */
-    phaseText?: string;
-    /** Time-left line already resolved by the controller. Wins over `etaSeconds`. */
-    etaText?: string;
-    /** 0 to 100, or null when the amount is not known. */
+    /** 0 to 100, or null when the amount is not known (indeterminate bar). */
     percent: number | null;
-    etaSeconds?: number | null;
-    /** Download size, already formatted ("120 MB"). Shown only for large downloads. */
-    sizeLabel?: string | null;
+    phaseText: string;
+    etaText?: string;
   }
 
-  let {
-    appName,
-    iconUrl = null,
-    phase = 'preparing',
-    phaseText: phaseOverride,
-    etaText: etaOverride,
-    percent,
-    etaSeconds = null,
-    sizeLabel = null
-  }: Props = $props();
-
-  const phaseLine = $derived.by(() => {
-    if (phaseOverride !== undefined) return phaseOverride;
-    switch (phase) {
-      case 'preparing':
-        return t('phase.preparing');
-      case 'waitingForPermission':
-        return t('perm.waiting');
-      case 'downloading':
-        return sizeLabel ? t('phase.downloadingSize', { size: sizeLabel }) : t('phase.downloading');
-      case 'installing':
-        return t('phase.installing', { app: appName });
-      case 'finishing':
-        return t('phase.finishing');
-    }
-  });
-
-  const etaLine = $derived.by(() => {
-    if (etaOverride !== undefined) return etaOverride;
-    if (phase === 'finishing') return '';
-    const { key, n } = etaPhrase(etaSeconds);
-    return key === 'eta.minutes' ? t(key, { n: n ?? 0 }) : t(key);
-  });
+  let { appName, iconUrl = null, percent, phaseText, etaText = '' }: Props = $props();
 </script>
 
 <div class="view">
@@ -76,8 +22,8 @@
   <div class="wrap">
     <ProgressBar value={percent} label={t('progress.label')} />
     <div class="meta">
-      <span class="phase" aria-live="polite">{phaseLine}</span>
-      <span class="eta tabular">{etaLine}</span>
+      <span class="phase" aria-live="polite">{phaseText}</span>
+      <span class="eta tabular">{etaText}</span>
     </div>
   </div>
 </div>

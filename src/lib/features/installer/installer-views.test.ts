@@ -5,47 +5,25 @@ import { describe, expect, it, vi } from 'vitest';
 import DoneView from './DoneView.svelte';
 import IncompatibleView from './IncompatibleView.svelte';
 import PermissionShade from './PermissionShade.svelte';
-import ProgressView, { etaPhrase } from './ProgressView.svelte';
+import ProgressView from './ProgressView.svelte';
 
 describe('ProgressView', () => {
-  it('shows a determinate bar with the phase and time left', () => {
+  it('renders the text it is given with a determinate bar', () => {
     render(ProgressView, {
       appName: 'Lumen Notes',
-      phase: 'installing',
       percent: 42.4,
-      etaSeconds: 12
+      phaseText: 'Installing Lumen Notes…',
+      etaText: 'A few seconds left'
     });
     expect(screen.getByText('Installing Lumen Notes')).toBeInTheDocument();
-    expect(screen.getByText('Installing Lumen Notes…')).toBeInTheDocument();
+    expect(screen.getByText('Installing Lumen Notes…')).toHaveAttribute('aria-live', 'polite');
     expect(screen.getByText('A few seconds left')).toBeInTheDocument();
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '42');
   });
 
   it('is indeterminate when the amount is unknown', () => {
-    render(ProgressView, { appName: 'Lumen Notes', phase: 'preparing', percent: null });
-    const bar = screen.getByRole('progressbar');
-    expect(bar).not.toHaveAttribute('aria-valuenow');
-    expect(screen.getByText('Getting ready…')).toBeInTheDocument();
-  });
-
-  it('adds the size for large downloads and hides the time when finishing', () => {
-    const { rerender } = render(ProgressView, {
-      appName: 'A',
-      phase: 'downloading',
-      percent: 10,
-      sizeLabel: '120 MB',
-      etaSeconds: 200
-    });
-    expect(screen.getByText('Getting a few things it needs (120 MB)')).toBeInTheDocument();
-    expect(screen.getByText('About 3 minutes left')).toBeInTheDocument();
-    void rerender({ appName: 'A', phase: 'finishing', percent: 100, etaSeconds: 3 });
-  });
-
-  it('maps seconds to plain phrases', () => {
-    expect(etaPhrase(null).key).toBe('eta.unknown');
-    expect(etaPhrase(5).key).toBe('eta.seconds');
-    expect(etaPhrase(60).key).toBe('eta.minute');
-    expect(etaPhrase(300)).toEqual({ key: 'eta.minutes', n: 5 });
+    render(ProgressView, { appName: 'A', percent: null, phaseText: 'Getting ready…' });
+    expect(screen.getByRole('progressbar')).not.toHaveAttribute('aria-valuenow');
   });
 });
 
@@ -78,24 +56,23 @@ describe('DoneView', () => {
 });
 
 describe('IncompatibleView', () => {
-  it('explains a wrong-family package without technical words', async () => {
+  it('shows the given title and body and closes', async () => {
     const onclose = vi.fn();
-    render(IncompatibleView, { kind: 'wrongFamily.debBased', appName: 'Lumen Notes', onclose });
-    expect(screen.getByText('Lumen Notes can’t be installed here')).toBeInTheDocument();
-    expect(screen.getByText(/made for Ubuntu-based computers/)).toBeInTheDocument();
+    render(IncompatibleView, {
+      title: 'Lumen can’t be installed here',
+      body: 'Body text',
+      onclose
+    });
+    expect(screen.getByText('Lumen can’t be installed here')).toBeInTheDocument();
+    expect(screen.getByText('Body text')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Open' })).toBeNull();
     await fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(onclose).toHaveBeenCalledOnce();
   });
 
-  it('offers Open when the same version is already installed', async () => {
+  it('offers Open when asked', async () => {
     const onopen = vi.fn();
-    render(IncompatibleView, {
-      kind: 'alreadyInstalled.same',
-      appName: 'Lumen Notes',
-      canOpen: true,
-      onclose: vi.fn(),
-      onopen
-    });
+    render(IncompatibleView, { title: 'T', canOpen: true, onclose: vi.fn(), onopen });
     await fireEvent.click(screen.getByRole('button', { name: 'Open' }));
     expect(onopen).toHaveBeenCalledOnce();
   });

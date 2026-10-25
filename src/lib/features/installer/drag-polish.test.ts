@@ -81,7 +81,7 @@ describe('drag polish', () => {
 
 describe('resolved-text props', () => {
   it('ProgressView shows controller text, live region, indeterminate bar', () => {
-    render(ProgressView, { appName: 'A', percent: null, phaseText: 'Working…', etaText: '' });
+    render(ProgressView, { appName: 'A', percent: null, phaseText: 'Working…' });
     expect(screen.getByText('Working…')).toHaveAttribute('aria-live', 'polite');
     expect(screen.getByRole('progressbar')).not.toHaveAttribute('aria-valuenow');
   });
@@ -89,7 +89,6 @@ describe('resolved-text props', () => {
   it('IncompatibleView uses resolved title/body and offers Open on request', async () => {
     const onopen = vi.fn();
     render(IncompatibleView, {
-      appName: 'A',
       title: 'T',
       body: 'B',
       canOpen: true,
