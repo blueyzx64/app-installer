@@ -50,6 +50,39 @@ export function etaCopy(etaSecs: number | null): Msg {
   }
 }
 
+/** Which incompatible screen to show. null = installable. Mirrors `compatCopy`. */
+export type CompatKind =
+  | 'wrongFamily.debBased'
+  | 'wrongFamily.rpmBased'
+  | 'wrongArch'
+  | 'alreadyInstalled.same'
+  | 'alreadyInstalled.older'
+  | 'missingRuntime.fuse2'
+  | 'unsupported';
+
+export function compatKind(compat: Compatibility): CompatKind | null {
+  switch (compat.kind) {
+    case 'ok':
+      return null;
+    case 'wrongFamily':
+      return compat.madeFor === 'debBased' ? 'wrongFamily.debBased' : 'wrongFamily.rpmBased';
+    case 'wrongArch':
+      return 'wrongArch';
+    case 'alreadyInstalled':
+      return compat.relation === 'same'
+        ? 'alreadyInstalled.same'
+        : compat.relation === 'older'
+          ? 'alreadyInstalled.older'
+          : null;
+    case 'missingRuntime':
+      return 'missingRuntime.fuse2';
+    case 'unsupported':
+      return 'unsupported';
+    default:
+      return assertNever(compat);
+  }
+}
+
 export interface CompatCopy {
   title: Msg;
   /** null when there is no body line. */
