@@ -7,7 +7,9 @@ const eslint = new ESLint({ cwd: process.cwd() });
 
 async function hits(filePath, code) {
   const [r] = await eslint.lintText(code, { filePath });
-  return r.messages.filter((m) => m.ruleId === 'no-restricted-imports').length;
+  return r.messages.filter((m) =>
+    ['no-restricted-imports', '@typescript-eslint/no-restricted-imports'].includes(m.ruleId ?? '')
+  ).length;
 }
 
 const tauri = "import { invoke } from '@tauri-apps/api/core';\ninvoke;\n";
@@ -33,4 +35,12 @@ test('core may not import svelte, sveltekit or tauri', async () => {
 
 test('svelte is fine outside core', async () => {
   assert.equal(await hits('src/lib/ui/a.ts', svelte), 0);
+});
+
+test('core may import infrastructure types only', async () => {
+  const typeOnly =
+    "import type { X } from '$lib/infrastructure/tauri/bindings';\nexport type Y = X;\n";
+  const runtime = "import { commands } from '$lib/infrastructure/tauri/bindings';\ncommands;\n";
+  assert.equal(await hits('src/lib/core/a.ts', typeOnly), 0);
+  assert.equal(await hits('src/lib/core/a.ts', runtime), 1);
 });

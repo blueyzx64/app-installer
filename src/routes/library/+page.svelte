@@ -17,8 +17,8 @@
     void library.load();
   });
 
-  // A package opened or dropped while the library is showing goes to the installer.
-  $effect(() => installer.start(() => void goto(resolve('/install'))));
+  // A package opened or dropped while the library is showing is handled by the
+  // root layout, which sends it to the installer (one subscription for all routes).
 
   async function openPackage() {
     let path: string | null = null;

@@ -12,14 +12,6 @@ import { createMockGateways } from '$lib/infrastructure/mock';
 beforeEach(() => goto.mockReset());
 
 describe('library route', () => {
-  it('goes to the installer when a file is opened while it is showing', async () => {
-    const gw = createMockGateways({ scenario: 'rpm', launchFile: null });
-    render(TestHost, { gateways: gw });
-    await screen.findByText('Pixel Draw');
-    gw.controls.emitOpenFile('/tmp/x.rpm');
-    expect(goto).toHaveBeenCalledWith('/install');
-  });
-
   it('empty state: Open a Package… picks a file and opens the installer', async () => {
     const gw = createMockGateways({ scenario: 'empty-library', launchFile: null });
     const pick = vi.spyOn(gw.files, 'pickPackage').mockResolvedValue('/tmp/x.rpm');
