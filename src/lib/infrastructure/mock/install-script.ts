@@ -23,7 +23,7 @@ function progress(
   percent: number | null,
   etaSecs: number | null
 ): ScriptStep<never> {
-  return { at, event: { kind: 'progress', phase, percent, etaSecs } };
+  return { at, event: { kind: 'progress', phase, percent, etaSecs, allowCancel: false } };
 }
 
 /** `count` evenly spaced progress steps for one phase, 100/count .. 100 percent. */

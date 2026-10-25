@@ -19,12 +19,16 @@ export const commands = {
 	/**  System packages prompt through polkit; cancelling is an outcome. */
 	uninstall: (appId: string, onEvent: Channel<InstallEvent>) => __TAURI_INVOKE<UninstallOutcome>("uninstall", { appId, onEvent }),
 	launchApp: (appId: string) => __TAURI_INVOKE<null>("launch_app", { appId }),
+	/**  What removing the app would do. Asked before the confirm sheet (F-42). */
+	uninstallPlan: (appId: string) => __TAURI_INVOKE<UninstallPlan>("uninstall_plan", { appId }),
 	defaultHandlerStatus: () => __TAURI_INVOKE<DefaultStatus>("default_handler_status"),
 	/**  Makes this app the default for all supported MIME types. */
 	makeDefaultHandler: () => __TAURI_INVOKE<null>("make_default_handler"),
 	/**  Remembers "Not Now". */
 	dismissDefaultPrompt: () => __TAURI_INVOKE<null>("dismiss_default_prompt"),
 	getAppearance: () => __TAURI_INVOKE<Appearance>("get_appearance"),
+	/**  Opens the chooser. `None` means the person dismissed it (a cancel, not an error). */
+	pickPackage: () => __TAURI_INVOKE<string | null>("pick_package"),
 };
 
 /* Types */
@@ -66,7 +70,9 @@ export type DefaultStatus = {
 /**  Stable error codes. Keep in sync with `docs/architecture/ipc-contract.md`. */
 export type ErrorCode = "permissionDenied" | "offline" | "missingDependencies" | "conflicts" | "notEnoughSpace" | "corruptFile" | "untrustedSource" | "backendUnavailable" | "notFound" | "busy" | "unknown";
 
-export type InstallEvent = { kind: "plan"; extraPackages: number; downloadBytes: number } | { kind: "progress"; phase: InstallPhase; percent: number | null; etaSecs: number | null };
+export type InstallEvent = { kind: "plan"; extraPackages: number; downloadBytes: number } | { kind: "progress"; phase: InstallPhase; percent: number | null; etaSecs: number | null; 
+/**  True only while the backend accepts a cancel (F-28). */
+allowCancel: boolean };
 
 export type InstallOutcome = { kind: "installed"; app: InstalledApp } | { kind: "cancelled" } | { kind: "failed"; code: ErrorCode; detail: string | null };
 
@@ -108,6 +114,12 @@ export type PackagePreview = {
 export type Runtime = "fuse2";
 
 export type UninstallOutcome = { kind: "removed" } | { kind: "cancelled" } | { kind: "failed"; code: ErrorCode; detail: string | null };
+
+/**  What removing an app would do (F-42). */
+export type UninstallPlan = {
+	alsoRemoves: number,
+	needsPermission: boolean,
+};
 
 export type UnsupportedReason = "appImageType1" | "dwarfs" | "unknownFormat";
 

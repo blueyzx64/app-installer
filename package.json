@@ -16,7 +16,7 @@
     "e2e": "playwright test",
     "test:integration": "bash scripts/test-integration.sh",
     "tauri": "tauri",
-    "bindings": "cd src-tauri && cargo run --bin export-bindings"
+    "bindings": "cd src-tauri && cargo run --features export-bindings --bin export-bindings"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

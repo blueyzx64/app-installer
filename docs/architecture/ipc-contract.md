@@ -14,11 +14,13 @@ Naming: commands use `snake_case` in Rust and camelCase wrappers in TS. Fields u
 | `cancel_install` | `{ previewId: string }` | `void` | Best effort (PackageKit `Cancel()` while `AllowCancel` is true) |
 | `list_installed` | none | `InstalledApp[]` | Ledger reconciled with reality |
 | `uninstall` | `{ appId: string, onEvent: Channel<InstallEvent> }` | `UninstallOutcome` | System packages prompt via polkit |
+| `uninstall_plan` | `{ appId: string }` | `UninstallPlan` | v2 (F-42). What removing would do, asked before the confirm sheet |
 | `launch_app` | `{ appId: string }` | `void` | |
 | `default_handler_status` | none | `DefaultStatus` | `{ isDefault: boolean, askedBefore: boolean }` |
 | `make_default_handler` | none | `void` | For all supported MIME types |
 | `dismiss_default_prompt` | none | `void` | Remembers "Not Now" |
 | `get_appearance` | none | `Appearance` | Snapshot. Changes arrive through the `appearance://changed` event |
+| `pick_package` | none | `string \| null` | v2 (F-07). Native file chooser, filters .rpm .AppImage .deb. `null` = dismissed |
 
 Window operations (close, minimize, start dragging) use `@tauri-apps/api/window` directly from `infrastructure/tauri/window-gateway.ts`, allowed through capabilities.
 
@@ -61,7 +63,8 @@ type InstallPhase = 'preparing' | 'waitingForPermission' | 'downloading' | 'inst
 
 type InstallEvent =
   | { kind: 'plan'; extraPackages: number; downloadBytes: number }
-  | { kind: 'progress'; phase: InstallPhase; percent: number | null; etaSecs: number | null };
+  | { kind: 'progress'; phase: InstallPhase; percent: number | null; etaSecs: number | null; allowCancel: boolean };
+// allowCancel (v2, F-28): true only while the backend accepts a cancel.
 
 type InstallOutcome =
   | { kind: 'installed'; app: InstalledApp }
@@ -87,6 +90,8 @@ type UninstallOutcome =
   | { kind: 'removed' }
   | { kind: 'cancelled' }
   | { kind: 'failed'; code: ErrorCode; detail: string | null };
+
+interface UninstallPlan { alsoRemoves: number; needsPermission: boolean; }  // v2
 
 interface DefaultStatus { isDefault: boolean; askedBefore: boolean; }
 

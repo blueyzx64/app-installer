@@ -3,7 +3,7 @@
 use tauri::State;
 use tauri::ipc::Channel;
 
-use crate::dto::{InstallEvent, InstalledApp, UninstallOutcome};
+use crate::dto::{InstallEvent, InstalledApp, UninstallOutcome, UninstallPlan};
 use crate::error::CommandError;
 use crate::events::ChannelObserver;
 use crate::state::AppState;
@@ -32,4 +32,15 @@ pub async fn uninstall(
 #[specta::specta]
 pub async fn launch_app(state: State<'_, AppState>, app_id: String) -> Result<(), CommandError> {
     Ok(state.launch_app.execute(&app_id.parse()?).await?)
+}
+
+/// What removing the app would do. Asked before the confirm sheet (F-42).
+#[tauri::command]
+#[specta::specta]
+pub async fn uninstall_plan(
+    state: State<'_, AppState>,
+    app_id: String,
+) -> Result<UninstallPlan, CommandError> {
+    let id = app_id.parse()?;
+    Ok(state.uninstall_plan.execute(&id).await?.into())
 }

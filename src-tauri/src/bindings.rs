@@ -25,6 +25,7 @@ pub fn builder() -> Builder<tauri::Wry> {
             library::list_installed,
             library::uninstall,
             library::launch_app,
+            library::uninstall_plan,
             defaults::default_handler_status,
             defaults::make_default_handler,
             defaults::dismiss_default_prompt,
@@ -56,6 +57,7 @@ mod tests {
             "listInstalled",
             "uninstall:",
             "launchApp",
+            "uninstallPlan",
             "defaultHandlerStatus",
             "makeDefaultHandler",
             "dismissDefaultPrompt",
@@ -76,6 +78,7 @@ mod tests {
             "Appearance",
             "DefaultStatus",
             "UninstallOutcome",
+            "UninstallPlan",
         ] {
             assert!(
                 ts.contains(&format!("export type {ty} =")),
