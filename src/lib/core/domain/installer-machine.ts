@@ -11,15 +11,28 @@ import type {
 
 /**
  * Every state except `idle` carries `queued`: paths opened while busy (FIFO).
+ * States with a preview may carry `source`: the file it was read from (used to never queue it twice).
  * `idle` = no package yet (initial) or window closing.
  */
 export type InstallerState =
   | { tag: 'idle' }
   | { tag: 'inspecting'; path: string; queued: string[] }
-  | { tag: 'ready'; preview: PackagePreview; queued: string[] }
-  | { tag: 'dragging'; preview: PackagePreview; overFolder: boolean; queued: string[] }
-  | { tag: 'starting'; preview: PackagePreview; plan?: Plan; queued: string[] }
-  | { tag: 'awaitingPermission'; preview: PackagePreview; plan?: Plan; queued: string[] }
+  | { tag: 'ready'; preview: PackagePreview; queued: string[]; source?: string }
+  | {
+      tag: 'dragging';
+      preview: PackagePreview;
+      overFolder: boolean;
+      queued: string[];
+      source?: string;
+    }
+  | { tag: 'starting'; preview: PackagePreview; plan?: Plan; queued: string[]; source?: string }
+  | {
+      tag: 'awaitingPermission';
+      preview: PackagePreview;
+      plan?: Plan;
+      queued: string[];
+      source?: string;
+    }
   | {
       tag: 'installing';
       preview: PackagePreview;
@@ -32,9 +45,16 @@ export type InstallerState =
       allowCancel: boolean;
       plan?: Plan;
       queued: string[];
+      source?: string;
     }
-  | { tag: 'succeeded'; preview: PackagePreview; app: InstalledApp; queued: string[] }
-  | { tag: 'incompatible'; preview: PackagePreview; queued: string[] }
+  | {
+      tag: 'succeeded';
+      preview: PackagePreview;
+      app: InstalledApp;
+      queued: string[];
+      source?: string;
+    }
+  | { tag: 'incompatible'; preview: PackagePreview; queued: string[]; source?: string }
   | {
       tag: 'failed';
       preview: PackagePreview | null;
@@ -43,6 +63,7 @@ export type InstallerState =
       code: ErrorCode;
       detail: string | null;
       queued: string[];
+      source?: string;
     };
 
 export type InstallerTag = InstallerState['tag'];
@@ -112,8 +133,26 @@ export function normalizePercent(p: number | null): number | null {
   return Math.max(0, Math.min(100, p));
 }
 
-function enqueue(s: Exclude<InstallerState, { tag: 'idle' }>, path: string): InstallerState {
+type Open = Exclude<InstallerState, { tag: 'idle' }>;
+
+/** The file shown right now (being read, or the preview's source). */
+function currentPath(s: Open): string | undefined {
+  if (s.tag === 'inspecting') return s.path;
+  if (s.tag === 'failed' && s.preview === null) return s.path ?? undefined;
+  return s.source;
+}
+
+/** Queue a path, unless it is already queued or is the file on screen (no doubles, ever). */
+function enqueue(s: Open, path: string): InstallerState {
+  if (path === currentPath(s) || s.queued.includes(path)) return s;
   return { ...s, queued: [...s.queued, path] };
+}
+
+/** queue + source, carried across transitions. */
+function keep(s: Open): { queued: string[]; source?: string } {
+  return 'source' in s && s.source !== undefined
+    ? { queued: s.queued, source: s.source }
+    : { queued: s.queued };
 }
 
 function progressed(
@@ -136,12 +175,14 @@ export function installerMachine(state: InstallerState, event: InstallerEvent): 
     if (state.tag === 'idle') return { tag: 'inspecting', path: event.path, queued: [] };
     // Never replace the preview while a drag/install is in flight.
     if (state.tag === 'dragging' || isBusy(state)) return enqueue(state, event.path);
-    if (state.tag === 'inspecting') {
-      // Keep the file being inspected; a second one waits its turn (never dropped, never doubled).
-      if (event.path === state.path || state.queued.includes(event.path)) return state;
-      return enqueue(state, event.path);
-    }
-    return { tag: 'inspecting', path: event.path, queued: state.queued };
+    // Keep the file being inspected; a second one waits its turn (never dropped, never doubled).
+    if (state.tag === 'inspecting') return enqueue(state, event.path);
+    // Replacing the screen: the new file leaves the queue so it is not opened twice.
+    return {
+      tag: 'inspecting',
+      path: event.path,
+      queued: state.queued.filter((q) => q !== event.path)
+    };
   }
 
   switch (state.tag) {
@@ -153,8 +194,8 @@ export function installerMachine(state: InstallerState, event: InstallerEvent): 
         if (event.path !== undefined && event.path !== state.path) return state; // stale
         const preview = event.preview;
         return isInstallable(preview)
-          ? { tag: 'ready', preview, queued: state.queued }
-          : { tag: 'incompatible', preview, queued: state.queued };
+          ? { tag: 'ready', preview, queued: state.queued, source: state.path }
+          : { tag: 'incompatible', preview, queued: state.queued, source: state.path };
       }
       if (event.type === 'INSPECT_FAILED') {
         if (event.path !== undefined && event.path !== state.path) return state; // stale
@@ -172,10 +213,10 @@ export function installerMachine(state: InstallerState, event: InstallerEvent): 
 
     case 'ready': {
       if (event.type === 'DRAG_START') {
-        return { tag: 'dragging', preview: state.preview, overFolder: false, queued: state.queued };
+        return { tag: 'dragging', preview: state.preview, overFolder: false, ...keep(state) };
       }
       if (event.type === 'KEY_INSTALL') {
-        return { tag: 'starting', preview: state.preview, queued: state.queued };
+        return { tag: 'starting', preview: state.preview, ...keep(state) };
       }
       if (event.type === 'CLOSE') return close(state);
       return state;
@@ -184,10 +225,10 @@ export function installerMachine(state: InstallerState, event: InstallerEvent): 
     case 'dragging': {
       if (event.type === 'DRAG_OVER') return { ...state, overFolder: event.overFolder };
       if (event.type === 'DRAG_CANCEL') {
-        return { tag: 'ready', preview: state.preview, queued: state.queued };
+        return { tag: 'ready', preview: state.preview, ...keep(state) };
       }
       if (event.type === 'DROP_ON_FOLDER') {
-        return { tag: 'starting', preview: state.preview, queued: state.queued };
+        return { tag: 'starting', preview: state.preview, ...keep(state) };
       }
       return state;
     }
@@ -201,7 +242,7 @@ export function installerMachine(state: InstallerState, event: InstallerEvent): 
             tag: 'awaitingPermission',
             preview: state.preview,
             plan: state.plan,
-            queued: state.queued
+            ...keep(state)
           };
         }
         const p = progressed(null, event);
@@ -214,7 +255,7 @@ export function installerMachine(state: InstallerState, event: InstallerEvent): 
           etaSecs: p.etaSecs,
           allowCancel: event.allowCancel ?? false,
           plan: state.plan,
-          queued: state.queued
+          ...keep(state)
         };
       }
       if (event.type === 'FINISHED') return finish(state, event.outcome);
@@ -251,7 +292,7 @@ export function installerMachine(state: InstallerState, event: InstallerEvent): 
     case 'failed': {
       if (event.type === 'RETRY') {
         if (state.preview) {
-          return { tag: 'ready', preview: state.preview, queued: state.queued };
+          return { tag: 'ready', preview: state.preview, ...keep(state) };
         }
         if (state.path !== null) {
           return { tag: 'inspecting', path: state.path, queued: state.queued };
@@ -276,9 +317,9 @@ function finish(
 ): InstallerState {
   switch (outcome.kind) {
     case 'installed':
-      return { tag: 'succeeded', preview: state.preview, app: outcome.app, queued: state.queued };
+      return { tag: 'succeeded', preview: state.preview, app: outcome.app, ...keep(state) };
     case 'cancelled':
-      return { tag: 'ready', preview: state.preview, queued: state.queued };
+      return { tag: 'ready', preview: state.preview, ...keep(state) };
     case 'failed':
       return {
         tag: 'failed',
@@ -286,7 +327,7 @@ function finish(
         path: null,
         code: outcome.code,
         detail: outcome.detail,
-        queued: state.queued
+        ...keep(state)
       };
   }
 }
