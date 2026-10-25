@@ -16,6 +16,8 @@ use installer_domain::{
 
 /// Decompressed payload bytes we are willing to walk while looking for an icon.
 const PAYLOAD_SCAN_CAP: u64 = 96 * 1024 * 1024;
+/// Most bytes lead + signature + header may span (real ones are well under 8 MiB).
+const HEADER_BYTES_MAX: u64 = 64 * 1024 * 1024;
 /// Largest single icon we keep.
 const ICON_MAX_BYTES: u64 = 2 * 1024 * 1024;
 /// Longest file name we accept inside the cpio archive.
@@ -34,7 +36,11 @@ impl RpmInspector {
     pub fn inspect_path(path: &Path, with_icon: bool) -> Result<PackageMetadata, InspectError> {
         let file = File::open(path).map_err(map_io)?;
         let mut reader = BufReader::new(file);
-        let parsed = rpm::PackageMetadata::parse(&mut reader).map_err(map_rpm)?;
+        // Cap header reads: the crate trusts the sizes in the file. Hitting the cap is a short read.
+        let parsed = {
+            let mut capped = (&mut reader).take(HEADER_BYTES_MAX);
+            rpm::PackageMetadata::parse(&mut capped).map_err(map_rpm)?
+        };
 
         if parsed.is_source_package() {
             return Err(InspectError::Unsupported(UnsupportedReason::UnknownFormat));
