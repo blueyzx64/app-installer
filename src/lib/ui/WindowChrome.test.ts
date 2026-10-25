@@ -2,7 +2,8 @@
 // Window controls: which buttons, which side, actions, drag fallback, unfocused look.
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
-import type { WindowControls as Controls } from '$lib/core/domain/types';
+import type { Appearance } from '$lib/core/domain/types';
+type Controls = Appearance['controls'];
 import type { WindowGateway } from '$lib/core/ports';
 import WindowChrome from './WindowChrome.svelte';
 import WindowControls from './WindowControls.svelte';

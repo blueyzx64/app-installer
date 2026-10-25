@@ -416,4 +416,39 @@ mod tests {
         assert_eq!(busy, InstallOutcome::Failed(InstallError::Busy));
         assert_eq!(first, InstallOutcome::Cancelled);
     }
+
+    #[tokio::test]
+    async fn user_scope_phases_follow_d019() {
+        let rig = Rig::new();
+        let p = rig.preview(PackageFormat::AppImage, Compatibility::Ok);
+        rig.uc().execute(p.id, &rig.observer).await;
+        assert_eq!(
+            rig.observer.phases(),
+            vec![
+                InstallPhase::Preparing,
+                InstallPhase::Installing,
+                InstallPhase::Finishing
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn install_of_another_preview_while_running_is_busy() {
+        let rig = Rig::new();
+        rig.system.block_until_cancelled();
+        let first = rig.preview(PackageFormat::Rpm, Compatibility::Ok);
+        let other = rig.preview(PackageFormat::AppImage, Compatibility::Ok);
+        let (uc, uc2) = (rig.uc(), rig.uc());
+
+        let (out, busy) = tokio::join!(uc.execute(first.id, &rig.observer), async {
+            let busy = uc2.execute(other.id, &RecordingObserver::default()).await;
+            rig.registry.cancel(first.id);
+            busy
+        });
+
+        assert_eq!(busy, InstallOutcome::Failed(InstallError::Busy));
+        assert_eq!(out, InstallOutcome::Cancelled);
+        assert!(rig.registry.get(other.id).is_some(), "other preview kept");
+        assert!(rig.user.trashed().is_empty());
+    }
 }

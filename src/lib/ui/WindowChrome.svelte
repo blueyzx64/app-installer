@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import { onMount } from 'svelte';
-  import type { WindowControls as Controls } from '$lib/core/domain/types';
+  import type { Appearance } from '$lib/core/domain/types';
   import type { WindowGateway } from '$lib/core/ports';
   import WindowControls from './WindowControls.svelte';
 
@@ -16,6 +16,7 @@
     children: Snippet;
   }
 
+  type Controls = Appearance['controls'];
   const DEFAULT_CONTROLS: Controls = { side: 'right', buttons: ['close'] };
 
   let { title, controls = DEFAULT_CONTROLS, window: win, children }: Props = $props();
@@ -42,7 +43,13 @@
 </script>
 
 <div class="chrome" data-window-chrome>
-  <header class="bar" data-tauri-drag-region data-side={controls.side} {onpointerdown}>
+  <header
+    class="bar"
+    role="presentation"
+    data-tauri-drag-region
+    data-side={controls.side}
+    {onpointerdown}
+  >
     <WindowControls
       {controls}
       {focused}

@@ -21,6 +21,9 @@ pub struct InstallProgress {
     /// 0..=100, or `None` when unknown (indeterminate bar).
     pub percent: Option<u8>,
     pub eta_secs: Option<u32>,
+    /// True only while the backend lets the install be cancelled (F-28).
+    #[serde(default)]
+    pub allow_cancel: bool,
 }
 
 impl InstallProgress {
@@ -29,7 +32,15 @@ impl InstallProgress {
             phase,
             percent: None,
             eta_secs: None,
+            allow_cancel: false,
         }
+    }
+
+    /// Same progress, with cancel allowed or not.
+    #[must_use]
+    pub fn with_allow_cancel(mut self, allow_cancel: bool) -> Self {
+        self.allow_cancel = allow_cancel;
+        self
     }
 
     /// Build from a raw percentage. Anything above 100 (PackageKit sends 101 for
@@ -40,6 +51,7 @@ impl InstallProgress {
             phase,
             percent,
             eta_secs,
+            allow_cancel: false,
         }
     }
 }
@@ -49,6 +61,14 @@ impl InstallProgress {
 pub struct InstallPlan {
     pub extra_packages: u32,
     pub download_bytes: u64,
+}
+
+/// What removing an app would do (F-42).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct UninstallPlan {
+    /// Other packages that would be removed with it.
+    pub also_removes: u32,
+    pub needs_permission: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

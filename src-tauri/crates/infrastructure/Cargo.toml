@@ -16,3 +16,7 @@ glib = "0.18" # lane S7
 futures-util = { version = "0.3", default-features = false } # lane S7
 tokio = { workspace = true, features = ["rt", "macros", "time", "sync"] } # lane S7
 tracing.workspace = true # lane S7
+
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }

@@ -17,4 +17,6 @@
 #![forbid(unsafe_code)]
 
 pub mod appearance; // lane S7
+pub mod file_probe;
+pub mod host;
 pub mod inspect;

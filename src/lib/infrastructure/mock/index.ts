@@ -17,6 +17,13 @@ import type {
   LibraryGateway,
   WindowGateway
 } from '../../core/ports';
+// lane S13
+import { appearanceFromLocation } from './appearance-params';
+import {
+  createMockDefaults,
+  defaultScenarioFromLocation,
+  defaultStatusFor
+} from './defaults-gateway';
 import {
   LUMEN_FILES,
   formatForScenario,
@@ -25,7 +32,9 @@ import {
   lumenPreview,
   seedLibrary
 } from './fixtures';
-import { installScript, uninstallScript, type ScriptStep } from './install-script';
+import { createMockFilesGateway } from './files-gateway'; // lane S4b
+import { installScript, type ScriptStep } from './install-script';
+import { createMockLibrary } from './library-gateway';
 import {
   DEFAULT_SCENARIO,
   launchOverrideFromLocation,
@@ -106,14 +115,14 @@ export function createMockGateways(options: MockOptions = {}): MockGateways {
       : override.none || scenario === 'empty-library'
         ? null
         : (override.file ?? LUMEN_FILES[formatForScenario(scenario)]);
-  const defaultStatus: DefaultStatus = { isDefault: false, askedBefore: false };
-  let appearance: Appearance = {
+  const defaultStatus: DefaultStatus = defaultStatusFor(defaultScenarioFromLocation()); // lane S13
+  let appearance: Appearance = appearanceFromLocation({
     colorScheme: 'light',
     accent: null,
     highContrast: false,
     reducedMotion: false,
     controls: { side: 'right', buttons: ['close'] }
-  };
+  });
 
   const installer: InstallerGateway = {
     async takeLaunchFile() {
@@ -179,39 +188,17 @@ export function createMockGateways(options: MockOptions = {}): MockGateways {
     }
   };
 
-  const library: LibraryGateway = {
-    async listInstalled() {
-      return [...installed];
+  const library: LibraryGateway = createMockLibrary({
+    scenario,
+    getInstalled: () => installed,
+    setInstalled: (apps) => {
+      installed = apps;
     },
-    async uninstall(appId, onEvent) {
-      const app = installed.find((a) => a.id === appId);
-      if (!app) throw fail('notFound', 'mock: unknown app');
-      const run = runScript<UninstallOutcome>(
-        uninstallScript(app.source === 'systemPackage', scenario),
-        onEvent
-      );
-      const outcome = await run.done;
-      if (outcome.kind === 'removed') installed = installed.filter((a) => a.id !== appId);
-      return outcome;
-    },
-    async launchApp(appId) {
-      if (!installed.some((a) => a.id === appId)) throw fail('notFound');
-      launched.push(appId);
-    }
-  };
+    launched,
+    run: (steps, onEvent) => runScript<UninstallOutcome>(steps, onEvent).done
+  }); // lane S12
 
-  const defaults: DefaultsGateway = {
-    async status() {
-      return { ...defaultStatus };
-    },
-    async makeDefault() {
-      defaultStatus.isDefault = true;
-      defaultStatus.askedBefore = true;
-    },
-    async dismissPrompt() {
-      defaultStatus.askedBefore = true;
-    }
-  };
+  const defaults: DefaultsGateway = createMockDefaults(defaultStatus); // lane S13
 
   const appearanceGw: AppearanceGateway = {
     async get() {
@@ -243,6 +230,7 @@ export function createMockGateways(options: MockOptions = {}): MockGateways {
     defaults,
     appearance: appearanceGw,
     window: windowGw,
+    files: createMockFilesGateway({ format: formatForScenario(scenario) }), // lane S4b
     controls: {
       scenario,
       emitOpenFile: (path) => openFileCbs.forEach((cb) => cb(path)),

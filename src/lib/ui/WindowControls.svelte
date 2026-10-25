@@ -1,5 +1,6 @@
 <script lang="ts">
-  import type { WindowControls } from '$lib/core/domain/types';
+  import type { Appearance } from '$lib/core/domain/types';
+  type WindowControls = Appearance['controls'];
   import { t } from '$lib/i18n';
 
   /**
