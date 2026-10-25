@@ -24,3 +24,4 @@ pub mod inspect;
 // lane S2c
 #[cfg(feature = "dnf5daemon")]
 pub mod dnf5daemon;
+pub mod packagekit; // lane S2
