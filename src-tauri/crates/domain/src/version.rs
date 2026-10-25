@@ -10,6 +10,11 @@ use serde::{Deserialize, Serialize};
 /// Ordering follows rpm: optional `epoch:`, then version, then `-release`,
 /// each compared with `rpmvercmp`. Equality is defined by that ordering, so
 /// `1.0` equals `1_0`. (No `Hash` impl for that reason.)
+///
+/// Real rpm semantics, on purpose: a missing release compares equal to any
+/// release (`1.0` == `1.0-3`), so `Eq` is not transitive across versions that
+/// lack a release (`1.0-1` == `1.0` == `1.0-2`, yet `1.0-1 < 1.0-2`). Transitivity
+/// holds for full `[epoch:]version-release` strings. Do not "fix" this.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Version(String);
@@ -364,5 +369,17 @@ mod prop {
             let longer = format!("{base}.1");
             prop_assert!(Version::new(longer.clone()) > Version::new(base.clone()), "{longer} vs {base}");
         }
+    }
+
+    #[test]
+    fn missing_release_equals_any_release_like_rpm() {
+        let (a, b, c) = (
+            Version::new("1.0-1"),
+            Version::new("1.0"),
+            Version::new("1.0-2"),
+        );
+        assert_eq!(a, b);
+        assert_eq!(b, c);
+        assert!(a < c, "full EVRs still order by release");
     }
 }
