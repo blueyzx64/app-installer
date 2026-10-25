@@ -10,15 +10,14 @@ installer-domain.workspace = true
 installer-application.workspace = true
 backhand = "0.25" # lane S3
 gio = "0.22" # lane S3
+gio-unix = "0.22" # lane S3
 glib = "0.22" # lane S3
 tokio = { workspace = true, features = ["rt", "fs"] } # lane S3
 serde_json.workspace = true # lane S3
 serde.workspace = true # lane S3
 image = { version = "0.25", default-features = false, features = ["png"] } # lane S3
-
 tracing.workspace = true # lane S3
-gio-unix = "0.22" # lane S3
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] } # lane S3
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
 tempfile = "3" # lane S3

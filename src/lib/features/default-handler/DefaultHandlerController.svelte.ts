@@ -53,6 +53,13 @@ export class DefaultHandlerController {
     }
   }
 
+  /** Toast closed early (or its own timer fired). Safe to call twice. */
+  dismissToast(): void {
+    if (this.#toastTimer) clearTimeout(this.#toastTimer);
+    this.#toastTimer = null;
+    this.#dispatch({ type: 'TOAST_DONE' });
+  }
+
   async notNow(): Promise<void> {
     if (this.state.tag !== 'prompting') return;
     this.#dispatch({ type: 'NOT_NOW' });

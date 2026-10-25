@@ -18,6 +18,8 @@
 
 pub mod appimage_store; // lane S3
 pub mod desktop_entries; // lane S3
+pub mod file_probe;
+pub mod host;
 pub mod inspect;
-pub mod launcher;
-pub mod ledger; // lane S3 // lane S3
+pub mod launcher; // lane S3
+pub mod ledger; // lane S3

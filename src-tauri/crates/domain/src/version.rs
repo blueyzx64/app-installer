@@ -319,6 +319,10 @@ mod prop {
         "[0-9a-z.~^_+-]{0,12}"
     }
 
+    fn full_evr() -> impl Strategy<Value = String> {
+        ("[0-9a-z.~^_]{1,8}", "[0-9a-z.~^_]{1,6}").prop_map(|(v, r)| format!("{v}-{r}"))
+    }
+
     fn evr_part() -> impl Strategy<Value = String> {
         "[0-9a-z.~^_-]{1,12}"
     }
@@ -337,8 +341,10 @@ mod prop {
             prop_assert_eq!(va.cmp(&va), Ordering::Equal);
         }
 
+        // rpmvercmp ignores the release when only one side has one, so ordering is
+        // only transitive among versions that all carry a release (or all lack one).
         #[test]
-        fn prop_transitive(a in any_version(), b in any_version(), c in any_version()) {
+        fn prop_transitive(a in full_evr(), b in full_evr(), c in full_evr()) {
             let (va, vb, vc) = (Version::new(a), Version::new(b), Version::new(c));
             if va <= vb && vb <= vc {
                 prop_assert!(va <= vc);

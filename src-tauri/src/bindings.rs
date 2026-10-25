@@ -6,7 +6,7 @@ use std::path::Path;
 use specta_typescript::Typescript;
 use tauri_specta::{Builder, ErrorHandlingMode, collect_commands};
 
-use crate::commands::{appearance, defaults, install, library, package};
+use crate::commands::{appearance, defaults, files, install, library, package};
 
 /// Where the generated file is committed, relative to `src-tauri/`.
 pub const BINDINGS_PATH: &str = "../src/lib/infrastructure/tauri/bindings.ts";
@@ -29,6 +29,7 @@ pub fn builder() -> Builder<tauri::Wry> {
             defaults::make_default_handler,
             defaults::dismiss_default_prompt,
             appearance::get_appearance,
+            files::pick_package, // lane S4b
         ])
 }
 
@@ -59,6 +60,7 @@ mod tests {
             "makeDefaultHandler",
             "dismissDefaultPrompt",
             "getAppearance",
+            "pickPackage",
         ] {
             assert!(ts.contains(cmd), "missing command {cmd}");
         }

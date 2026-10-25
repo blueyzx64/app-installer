@@ -22,6 +22,7 @@ pub use error::{BackendError, ErrorCode, InspectError, InstallError, UserAction}
 pub use host::{Arch, DistroFamily, HostSystem};
 pub use install::{
     DefaultStatus, InstallOutcome, InstallPhase, InstallPlan, InstallProgress, UninstallOutcome,
+    UninstallPlan,
 };
 pub use package::{
     IconData, IconKind, InstallScope, PackageFile, PackageFormat, PackageMetadata, SNIFF_LEN,

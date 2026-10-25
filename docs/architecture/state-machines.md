@@ -47,6 +47,14 @@ type InstallerState =
   | { tag: 'failed'; preview: PackagePreview | null; code: ErrorCode; detail: string | null };
 ```
 
+Phase order from the real backends (the reducer relies on it):
+
+- System scope: `Preparing → WaitingForPermission → Downloading/Installing → Finishing`.
+- User scope (AppImage): `Preparing → Installing → Finishing`. It never passes through `WaitingForPermission`.
+- The machine never goes from `installing` back to `awaitingPermission`.
+
+`INSPECT_FAILED(corruptFile)` is what a file with no known format produces. It leads to `Failed` with no preview.
+
 Invariants (test them):
 - You can't leave `starting`, `awaitingPermission` or `installing` through user gestures except **Cancel** (when `AllowCancel` is true).
 - `OPEN` while installing appends to `queued`. It never replaces the preview.

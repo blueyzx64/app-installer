@@ -12,4 +12,4 @@ One decision per file, numbered, never deleted. To change a decision, add a new 
 | [0006](0006-window-controls-follow-gnome-layout.md) | Mac-style window controls placed by GNOME button-layout | Accepted (corner/shadow: M0 spike 1) |
 | [0007](0007-polkit-owns-authentication.md) | polkit owns authentication | Accepted |
 | [0008](0008-fedora-first.md) | Fedora first, Ubuntu later | Accepted |
-| [0009](0009-generated-typed-ipc.md) | Generated, typed IPC bindings | Proposed (M0 spike 3) |
+| [0009](0009-generated-typed-ipc.md) | Generated, typed IPC bindings | Accepted (spike 3 confirmed) |
