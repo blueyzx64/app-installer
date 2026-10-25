@@ -135,7 +135,7 @@ pub fn build_state(launch_file: Option<PathBuf>) -> AppState {
             clock,
             registry.clone(),
         ),
-        cancel_install: CancelInstall::new(registry),
+        cancel_install: CancelInstall::new(registry.clone()),
         list_installed: ListInstalledApps::new(
             user.clone(),
             ledger.clone(),
@@ -143,7 +143,8 @@ pub fn build_state(launch_file: Option<PathBuf>) -> AppState {
             desktop.clone(),
         ),
         uninstall_plan: UninstallPlan::new(system.clone(), ledger.clone()),
-        uninstall_app: UninstallApp::new(system, user, desktop, ledger.clone()),
+        uninstall_app: UninstallApp::new(system, user, desktop, ledger.clone())
+            .with_registry(registry.clone()),
         launch_app: LaunchApp::new(ledger, launcher),
         default_status: GetDefaultHandlerStatus::new(defaults.clone()),
         make_default: MakeDefaultHandler::new(defaults.clone()),

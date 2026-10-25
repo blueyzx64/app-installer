@@ -24,6 +24,22 @@ pub async fn open_package(
     state: State<'_, AppState>,
     path: String,
 ) -> Result<PackagePreview, CommandError> {
-    let path = cli::validate_package_path(&path)?;
-    Ok(state.open_package.execute(path).await?.into())
+    tracing::info!("open_package start");
+    let path = cli::validate_package_path(&path).inspect_err(log_rejected)?;
+    match state.open_package.execute(path).await {
+        Ok(preview) => {
+            let preview: PackagePreview = preview.into();
+            tracing::info!(format = ?preview.format, name = %preview.name, "open_package ok");
+            Ok(preview)
+        }
+        Err(e) => {
+            let e = CommandError::from(e);
+            log_rejected(&e);
+            Err(e)
+        }
+    }
+}
+
+fn log_rejected(e: &CommandError) {
+    tracing::info!(code = ?e.code, "open_package failed");
 }
