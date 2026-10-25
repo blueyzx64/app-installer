@@ -58,7 +58,8 @@ trait Goal {
     fn resolve(&self, options: Opts<'_>) -> zbus::Result<(Vec<WireItem>, u32)>;
     fn do_transaction(&self, options: Opts<'_>) -> zbus::Result<()>;
     fn cancel(&self) -> zbus::Result<(bool, String)>;
-    fn get_transaction_problems_string(&self) -> zbus::Result<String>;
+    /// Upstream Goal.xml: `<arg name="problems" type="as" direction="out"/>`.
+    fn get_transaction_problems_string(&self) -> zbus::Result<Vec<String>>;
 }
 
 fn err(e: zbus::Error) -> BusError {
@@ -253,11 +254,16 @@ impl Dnf5Bus for ZbusBus {
                 .get_transaction_problems_string()
                 .await
                 .unwrap_or_default();
-            vec![if text.trim().is_empty() {
-                "problem resolving dependencies".to_owned()
+            let lines: Vec<String> = text
+                .into_iter()
+                .map(|l| l.trim().to_owned())
+                .filter(|l| !l.is_empty())
+                .collect();
+            if lines.is_empty() {
+                vec!["problem resolving dependencies".to_owned()]
             } else {
-                text
-            }]
+                lines
+            }
         } else {
             Vec::new()
         };
