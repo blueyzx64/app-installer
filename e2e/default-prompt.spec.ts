@@ -7,14 +7,11 @@ function tx(key: keyof typeof en, vars: Record<string, string | number> = {}): s
 }
 test.describe.configure({ timeout: 30_000 });
 
-const WAITING = 'waiting S5/S6: DefaultHandlerController + Sheet not wired into the install route';
-
 function sheet(page: Page) {
   return page.getByRole('dialog').filter({ hasText: tx('default.title') });
 }
 
 test('F-50 sheet appears after the package is inspected', async ({ page }) => {
-  test.fixme(true, WAITING);
   await page.goto('/?scenario=rpm');
   await expect(sheet(page)).toBeVisible();
   await expect(sheet(page).getByRole('button', { name: tx('default.make') })).toBeVisible();
@@ -22,7 +19,6 @@ test('F-50 sheet appears after the package is inspected', async ({ page }) => {
 });
 
 test('F-50 Make Default closes the sheet and shows the confirming toast', async ({ page }) => {
-  test.fixme(true, WAITING);
   await page.goto('/?scenario=rpm');
   await sheet(page)
     .getByRole('button', { name: tx('default.make') })
@@ -34,7 +30,6 @@ test('F-50 Make Default closes the sheet and shows the confirming toast', async 
 });
 
 test('F-50 Not Now closes the sheet and shows no toast', async ({ page }) => {
-  test.fixme(true, WAITING);
   await page.goto('/?scenario=rpm');
   await sheet(page)
     .getByRole('button', { name: tx('default.notNow') })
@@ -44,7 +39,6 @@ test('F-50 Not Now closes the sheet and shows no toast', async ({ page }) => {
 });
 
 test('F-50 the sheet is never shown on top of the permission shade', async ({ page }) => {
-  test.fixme(true, WAITING);
   await page.goto('/?scenario=rpm');
   await sheet(page)
     .getByRole('button', { name: tx('default.notNow') })
@@ -56,10 +50,6 @@ test('F-50 the sheet is never shown on top of the permission shade', async ({ pa
 });
 
 test('F-50 the question is asked once', async ({ page }) => {
-  test.fixme(
-    true,
-    'waiting S5: needs a persisted askedBefore; mock keeps it in memory per page load'
-  );
   await page.goto('/?scenario=rpm');
   await sheet(page)
     .getByRole('button', { name: tx('default.notNow') })
@@ -69,7 +59,6 @@ test('F-50 the question is asked once', async ({ page }) => {
 });
 
 test('F-50 sheet uses plain words only', async ({ page }) => {
-  test.fixme(true, WAITING);
   await page.goto('/?scenario=rpm');
   await expect(sheet(page)).toBeVisible();
   const text = (await sheet(page).innerText()).toLowerCase();

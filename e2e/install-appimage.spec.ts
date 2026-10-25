@@ -7,15 +7,12 @@ import {
   icon,
   openScenario,
   progressbar,
-  UI_PENDING,
-  uiWired,
   waitReady
 } from './helpers';
 
 // F-01 F-20 F-22 F-25 F-29 on the mock AppImage flow.
 test.describe('install AppImage by dragging', () => {
   test.beforeEach(async ({ page }) => {
-    test.fixme(!uiWired, UI_PENDING);
     await openScenario(page, 'appimage');
     await waitReady(page);
   });
