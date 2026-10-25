@@ -38,6 +38,10 @@ impl SystemPackages for UnavailableSystemPackages {
     ) -> Result<(), InstallError> {
         Err(InstallError::BackendUnavailable)
     }
+
+    async fn removal_plan(&self, _name: &str) -> Result<u32, BackendError> {
+        Err(BackendError::Unavailable("system backend".into()))
+    }
 }
 
 /// Supports no format. End of an [`InspectorChain`].

@@ -9,11 +9,13 @@ pub mod dto;
 pub mod error;
 pub mod events;
 pub mod fallbacks;
+pub mod logging; // lane S11
 pub mod state;
 
 use tauri::Manager;
 
 pub fn run() {
+    logging::init(); // lane S11
     let launch_file = std::env::current_dir()
         .ok()
         .and_then(|cwd| cli::launch_path_from_argv(&std::env::args().collect::<Vec<_>>(), &cwd));
@@ -31,7 +33,6 @@ pub fn run() {
                 }
             }
         }))
-        .plugin(tauri_plugin_log::Builder::new().build())
         .plugin(tauri_plugin_dialog::init()) // lane S4b
         .on_window_event(dropzone::on_window_event) // lane S4b
         .manage(composition::build_state(launch_file))
