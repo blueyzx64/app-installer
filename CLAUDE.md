@@ -10,6 +10,9 @@ A macOS-style "drag to Applications" installer for Linux: Tauri 2 + SvelteKit (S
 - Look and words: `docs/design/DESIGN-SYSTEM.md` · `docs/design/COPY.md`
 - Platform facts: `docs/platform/fedora-gnome.md` · Decisions: `docs/adr/`
 
+## Multi-agent builds
+See `start-workflow.md` (roles, lanes, memory protocol, token rules).
+
 ## Skills (in .claude/skills, use the one that matches the task)
 `apple-hig-design` · `svelte5-frontend` · `tauri-ipc` · `rust-clean-architecture` · `linux-package-backends` · `gnome-integration` · `plain-language-copy` · `release-packaging`
 

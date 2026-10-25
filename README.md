@@ -23,4 +23,4 @@ A friendly, macOS-style installer for Linux. Double-click a downloaded app, then
 | [Prototype](design/prototype/index.html) | Open in a browser to try the intended flow |
 | [Original handoff](docs/handoff/README.md) | Historical context |
 
-AI-assisted development: see [CLAUDE.md](CLAUDE.md) and `.claude/skills/`.
+AI-assisted development: see [CLAUDE.md](CLAUDE.md), `.claude/skills/`, and the agent-swarm build plan in [start-workflow.md](start-workflow.md).
