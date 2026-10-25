@@ -9,3 +9,17 @@ description = "Adapters that implement the application ports (PackageKit, AppIma
 installer-domain.workspace = true
 installer-application.workspace = true
 # Lanes B and C add zbus, backhand, rpm, gio, ashpd, tokio, serde_json here.
+
+# lane S2c: dnf5daemon fallback (F-31)
+zbus = { version = "5", default-features = false, features = ["tokio"], optional = true }
+tokio = { workspace = true, features = ["sync", "macros", "rt"], optional = true }
+futures-util = { version = "0.3", default-features = false, optional = true }
+trait-variant = { workspace = true, optional = true }
+
+[features]
+# lane S2c
+dnf5daemon = ["dep:zbus", "dep:tokio", "dep:futures-util", "dep:trait-variant"]
+
+[dev-dependencies]
+# lane S2c
+tokio = { workspace = true, features = ["sync", "macros", "rt", "time"] }

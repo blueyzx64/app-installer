@@ -17,3 +17,7 @@
 #![forbid(unsafe_code)]
 
 pub mod inspect;
+
+// lane S2c
+#[cfg(feature = "dnf5daemon")]
+pub mod dnf5daemon;
