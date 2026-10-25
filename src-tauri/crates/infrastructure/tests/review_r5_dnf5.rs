@@ -195,9 +195,13 @@ impl Drop for PrivateBus {
     }
 }
 
+/// The tests point DBUS_SYSTEM_BUS_ADDRESS (process-wide) at their own private bus,
+/// so they must not overlap.
+static BUS_ENV: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 async fn setup(mode: Mode) -> (PrivateBus, Arc<St>, Connection, Dnf5Daemon<ZbusBus>) {
     let bus = PrivateBus::start();
-    // SAFETY: --test-threads=1
+    // SAFETY: every test holds BUS_ENV for its whole run.
     unsafe { std::env::set_var("DBUS_SYSTEM_BUS_ADDRESS", &bus.addr) };
     let st = Arc::new(St::default());
     *st.mode.lock().unwrap() = Some(mode);
@@ -232,6 +236,7 @@ fn file() -> PackageFile {
 /// local .rpm path goes through Rpm.install, D-019 order holds, session closed.
 #[tokio::test(flavor = "multi_thread")]
 async fn review_r5_wire_happy_path_matches_upstream_xml() {
+    let _env = BUS_ENV.lock().await;
     let (_bus, st, _srv, d) = setup(Mode::Ok).await;
     let obs = RecordingObserver::default();
     let r = d.install(&file(), &obs, CancelToken::new()).await;
@@ -258,6 +263,7 @@ async fn review_r5_wire_happy_path_matches_upstream_xml() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn review_r5_polkit_denied_is_cancelled_and_session_closed() {
+    let _env = BUS_ENV.lock().await;
     let (_bus, st, _srv, d) = setup(Mode::Denied).await;
     let obs = RecordingObserver::default();
     let r = d.install(&file(), &obs, CancelToken::new()).await;
@@ -271,6 +277,7 @@ async fn review_r5_polkit_denied_is_cancelled_and_session_closed() {
 /// ever wakes it: one task + one bus match rule leaks per install/plan/remove.
 #[tokio::test(flavor = "multi_thread")]
 async fn review_r5_subscribe_task_does_not_leak_per_install() {
+    let _env = BUS_ENV.lock().await;
     let (_bus, _st, _srv, d) = setup(Mode::Ok).await;
     let m = tokio::runtime::Handle::current().metrics();
     let obs = RecordingObserver::default();
