@@ -3,6 +3,10 @@
 //! Planned: `rpm.rs`, `deb.rs`, `appimage.rs`, `elf.rs`, and a router that
 //! implements `PackageInspector` by dispatching on `PackageFormat`.
 
+// lane S2b
+pub mod deb;
+pub mod rpm;
+
 #[cfg(test)]
 mod tests {
     use std::fs;

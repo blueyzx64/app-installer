@@ -8,20 +8,34 @@ description = "Adapters that implement the application ports (PackageKit, AppIma
 [dependencies]
 installer-domain.workspace = true
 installer-application.workspace = true
-gio = "0.18" # lane S3b
-serde_json.workspace = true # lane S3b
-# Lanes B and C add zbus, backhand, rpm, gio, ashpd, tokio, serde_json here.
-
-# lane S2c: dnf5daemon fallback (F-31)
-zbus = { version = "5", default-features = false, features = ["tokio"], optional = true }
-tokio = { workspace = true, features = ["sync", "macros", "rt"], optional = true }
-futures-util = { version = "0.3", default-features = false, optional = true }
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tokio = { workspace = true, features = ["sync", "rt", "macros", "time", "fs"] }
+futures-util = { version = "0.3", default-features = false }
+# lane S2 (PackageKit) + lane S2c (dnf5daemon)
+zbus = { version = "5", default-features = false, features = ["tokio"] }
+# lane S2b (rpm/deb inspection)
+rpm = { version = "0.30.2", default-features = false, features = ["gzip-compression", "xz-compression", "zstd-compression"] }
+flate2 = "1.1.10"
+liblzma = "0.4.9"
+zstd = "0.14.3"
+# lane S3 (AppImage, desktop entries, launcher) + lane S3b (defaults)
+backhand = "0.25"
+gio = "0.22"
+gio-unix = "0.22"
+glib = "0.22"
+image = { version = "0.25", default-features = false, features = ["png"] }
+# lane S2c
 trait-variant = { workspace = true, optional = true }
 
 [features]
 # lane S2c
-dnf5daemon = ["dep:zbus", "dep:tokio", "dep:futures-util", "dep:trait-variant"]
+dnf5daemon = ["dep:trait-variant"]
 
 [dev-dependencies]
-tempfile = "3" # lane S3b
-tokio = { workspace = true, features = ["sync", "macros", "rt", "time"] }
+installer-application = { workspace = true, features = ["testing"] }
+tempfile = "3"
+tokio = { workspace = true, features = ["sync", "macros", "rt", "rt-multi-thread", "time", "test-util", "fs"] }
+# lane S2b: builds tiny .rpm fixtures in tests
+rpm = { version = "0.30.2", default-features = false, features = ["payload", "gzip-compression", "xz-compression", "zstd-compression"] }
