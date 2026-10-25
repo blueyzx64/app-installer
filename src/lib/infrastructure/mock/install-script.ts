@@ -57,15 +57,14 @@ export function installScript(
       { at: 2900, outcome: done }
     ];
   }
-  const steps: ScriptStep<InstallOutcome>[] = [
-    progress(0, 'preparing', 0, null),
-    progress(400, 'waitingForPermission', null, null)
-  ];
+  // Password prompt comes first, so the window can show the permission shade straight away.
+  const steps: ScriptStep<InstallOutcome>[] = [progress(0, 'waitingForPermission', null, null)];
   if (scenario === 'cancel-permission') {
     steps.push({ at: 1600, outcome: { kind: 'cancelled' } });
     return steps;
   }
   steps.push(
+    progress(1000, 'preparing', 0, null),
     { at: 1500, event: { kind: 'plan', extraPackages: 2, downloadBytes: 62_000_000 } },
     progress(1500, 'downloading', 0, 6)
   );

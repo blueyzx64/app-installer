@@ -6,9 +6,13 @@
   "dmg.folderUpdate": "Update",
   "dmg.needsPassword": "Needs your password",
   "dmg.keyboardHint": "Press Enter to install",
+  "dmg.iconLabel": "{app}. Drag into Applications to install.",
 
   "perm.waiting": "Waiting for permission…",
   "perm.sub": "Enter your password in the window that appeared.",
+
+  "progress.title": "Installing {app}",
+  "progress.label": "Install progress",
 
   "phase.preparing": "Getting ready…",
   "phase.downloading": "Getting a few things it needs",
@@ -59,6 +63,7 @@
 
   "details.label": "Details",
 
+  "action.cancel": "Cancel",
   "action.close": "Close",
   "action.tryAgain": "Try Again",
   "action.open": "Open",
