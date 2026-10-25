@@ -76,11 +76,22 @@ where
         }
 
         for app in scanned.into_iter().flatten() {
-            if !result.iter().any(|a| a.id == app.id) {
-                if let Err(e) = self.ledger.record(&app).await {
-                    tracing::warn!(error = %e, "could not record scanned app");
+            match result.iter_mut().find(|a| a.id == app.id) {
+                Some(known) => {
+                    // The file on disk is the truth for its version.
+                    if known.version != app.version {
+                        known.version = app.version.clone();
+                        if let Err(e) = self.ledger.record(known).await {
+                            tracing::warn!(error = %e, "could not refresh app version");
+                        }
+                    }
                 }
-                result.push(app);
+                None => {
+                    if let Err(e) = self.ledger.record(&app).await {
+                        tracing::warn!(error = %e, "could not record scanned app");
+                    }
+                    result.push(app);
+                }
             }
         }
 

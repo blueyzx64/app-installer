@@ -69,7 +69,11 @@ where
 
         match app.source {
             AppSource::AppImage => {
-                self.user.trash(&app).await?;
+                match self.user.trash(&app).await {
+                    // Deleted by hand already: still clean up what is left.
+                    Ok(()) | Err(InstallError::NotFound) => {}
+                    Err(e) => return Err(e),
+                }
                 // The app is already gone; leftovers are cleaned best effort.
                 if let Err(e) = self.desktop.remove_entry(&app).await {
                     tracing::warn!(error = %e, "could not remove desktop entry");
