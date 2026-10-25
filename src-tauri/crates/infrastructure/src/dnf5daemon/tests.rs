@@ -25,6 +25,11 @@ struct FakeBus {
     /// do_transaction waits until cancel() and then fails with Cancelled.
     block: bool,
     notify: Notify,
+    /// First cancel() is refused (as during the polkit dialog); signals only
+    /// flow after it, like a daemon that finished authorizing.
+    latch: bool,
+    first_cancel: Notify,
+    cancels: std::sync::atomic::AtomicUsize,
     sender: Mutex<Option<UnboundedSender<Dnf5Signal>>>,
 }
 
@@ -74,6 +79,9 @@ impl Dnf5Bus for FakeBus {
     async fn do_transaction(&self, _: &SessionId) -> Result<(), BusError> {
         self.log("do_transaction");
         let tx = self.sender.lock().unwrap().clone().unwrap();
+        if self.latch {
+            self.first_cancel.notified().await;
+        }
         for s in &self.signals {
             tx.send(s.clone()).unwrap();
         }
@@ -86,10 +94,17 @@ impl Dnf5Bus for FakeBus {
             None => Ok(()),
         }
     }
-    async fn cancel(&self, _: &SessionId) -> Result<(), BusError> {
+    async fn cancel(&self, _: &SessionId) -> Result<bool, BusError> {
         self.log("cancel");
+        let n = self
+            .cancels
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if self.latch && n == 0 {
+            self.first_cancel.notify_one();
+            return Ok(false);
+        }
         self.notify.notify_one();
-        Ok(())
+        Ok(true)
     }
 }
 
@@ -370,4 +385,36 @@ async fn remove_and_removal_plan() {
     assert!(rec.plans.lock().unwrap().is_empty());
     assert!(d.bus.calls().contains(&"remove lumen".to_owned()));
     assert_eq!(d.bus.calls().last().unwrap(), "close");
+}
+
+#[tokio::test]
+async fn cancel_during_polkit_is_reapplied_after_authorization() {
+    let bus = FakeBus {
+        resolution: two_installs(),
+        block: true,
+        latch: true,
+        signals: vec![
+            Dnf5Signal::DownloadAdded {
+                id: "d".into(),
+                total: 10,
+            },
+            Dnf5Signal::DownloadProgress {
+                id: "d".into(),
+                total: 10,
+                downloaded: 1,
+            },
+        ],
+        ..Default::default()
+    };
+    let d = Dnf5Daemon::new(bus);
+    let token = CancelToken::new();
+    let t2 = token.clone();
+    tokio::spawn(async move {
+        tokio::task::yield_now().await;
+        t2.cancel();
+    });
+    let r = d.install(&file(), &Rec::default(), token).await;
+    assert_eq!(r, Err(InstallError::Cancelled));
+    let n = d.bus.calls().iter().filter(|c| *c == "cancel").count();
+    assert!(n >= 2, "cancel must be re-applied, got {n}");
 }

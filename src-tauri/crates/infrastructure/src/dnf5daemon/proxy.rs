@@ -7,9 +7,9 @@
 //! - `open_session(a{sv}) -> o`, `close_session(o) -> b`
 //! - per session: `org.rpm.dnf.v0.rpm.Rpm` (`list`, `install`, `remove`) and `org.rpm.dnf.v0.Goal`
 //!   (`resolve(a{sv}) -> (a(sssa{sv}a{sv}), u)`, `do_transaction(a{sv})`, `cancel() -> (b, s)`)
-//! - signals (first arg = session path `o`): `org.rpm.dnf.v0.DownloadProgress`
+//! - signals (first arg = session path `o`): on `org.rpm.dnf.v0.Base`
 //!   `download_add_new(o,s,s,x)`, `download_progress(o,s,x,x)`;
-//!   `org.rpm.dnf.v0.rpm.Transaction` `transaction_before_begin(o,t)`,
+//!   on `org.rpm.dnf.v0.rpm.Rpm` `transaction_before_begin(o,t)`,
 //!   `transaction_elem_progress(o,s,t,t)`, `transaction_after_complete(o,b)`
 //! - `Rpm.install` accepting a local `.rpm` path as a spec (may instead need a
 //!   dedicated call; this is the biggest unknown)
@@ -58,6 +58,7 @@ trait Goal {
     fn resolve(&self, options: Opts<'_>) -> zbus::Result<(Vec<WireItem>, u32)>;
     fn do_transaction(&self, options: Opts<'_>) -> zbus::Result<()>;
     fn cancel(&self) -> zbus::Result<(bool, String)>;
+    fn get_transaction_problems_string(&self) -> zbus::Result<String>;
 }
 
 fn err(e: zbus::Error) -> BusError {
@@ -65,7 +66,10 @@ fn err(e: zbus::Error) -> BusError {
         zbus::Error::MethodError(name, desc, _) => {
             classify_dbus_error(name.as_str(), desc.as_deref().unwrap_or(""))
         }
-        zbus::Error::FDO(f) => classify_dbus_error(&format!("{f:?}"), &f.to_string()),
+        zbus::Error::FDO(f) => {
+            use zbus::DBusError as _;
+            classify_dbus_error(f.name().as_str(), f.description().unwrap_or(""))
+        }
         other => BusError::Failed(other.to_string()),
     }
 }
@@ -241,16 +245,19 @@ impl Dnf5Bus for ZbusBus {
     }
 
     async fn resolve(&self, session: &SessionId) -> Result<Resolution, BusError> {
-        let (items, code) = self
-            .goal(session)
-            .await?
-            .resolve(HashMap::new())
-            .await
-            .map_err(err)?;
-        // ⚠ code: 0 ok, 1 warnings, 2 errors. Problem text needs
-        // `get_transaction_problems_string()`; generic text until verified.
+        let goal = self.goal(session).await?;
+        let (items, code) = goal.resolve(HashMap::new()).await.map_err(err)?;
+        // ⚠ code: 0 ok, 1 warnings, 2 errors. On error keep the real cause.
         let problems = if code >= 2 {
-            vec!["problem resolving dependencies".to_owned()]
+            let text = goal
+                .get_transaction_problems_string()
+                .await
+                .unwrap_or_default();
+            vec![if text.trim().is_empty() {
+                "problem resolving dependencies".to_owned()
+            } else {
+                text
+            }]
         } else {
             Vec::new()
         };
@@ -280,12 +287,20 @@ impl Dnf5Bus for ZbusBus {
             .map_err(err)?;
         let (tx, rx) = unbounded_channel();
         let sid = session.0.clone();
+        // Ends as soon as the receiver is dropped; dropping `stream` removes the
+        // bus match rule. No per-call leak.
         tokio::spawn(async move {
-            while let Some(Ok(msg)) = stream.next().await {
-                if let Some(sig) = decode(&msg, &sid)
-                    && tx.send(sig).is_err()
-                {
-                    break; // receiver dropped, transaction over
+            loop {
+                tokio::select! {
+                    () = tx.closed() => break,
+                    msg = stream.next() => {
+                        let Some(Ok(msg)) = msg else { break };
+                        if let Some(sig) = decode(&msg, &sid)
+                            && tx.send(sig).is_err()
+                        {
+                            break;
+                        }
+                    }
                 }
             }
         });
@@ -300,9 +315,9 @@ impl Dnf5Bus for ZbusBus {
             .map_err(err)
     }
 
-    async fn cancel(&self, session: &SessionId) -> Result<(), BusError> {
-        self.goal(session).await?.cancel().await.map_err(err)?;
-        Ok(())
+    async fn cancel(&self, session: &SessionId) -> Result<bool, BusError> {
+        let (ok, _msg) = self.goal(session).await?.cancel().await.map_err(err)?;
+        Ok(ok)
     }
 }
 

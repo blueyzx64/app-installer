@@ -11,14 +11,22 @@ use super::bus::{BusError, Dnf5Signal, InstalledRpm, Resolution};
 pub fn classify_dbus_error(name: &str, message: &str) -> BusError {
     let n = name.to_ascii_lowercase();
     let m = message.to_ascii_lowercase();
-    if n.ends_with("accessdenied")
-        || n.contains("notauthorized")
-        || n.contains("authorization")
-        || m.contains("not authorized")
-        || m.contains("authentication")
+    // Only polkit's own errors, or dnf5daemon's exact `runtime_error("Not authorized")`
+    // (arrives as DBus.Error.Failed + that text), count as a dismissed dialog.
+    // Never match loose words: an HTTP 401 "authentication required" is a real failure.
+    if n.starts_with("org.freedesktop.policykit1.error.")
+        || message.trim().eq_ignore_ascii_case("not authorized")
     {
         BusError::AccessDenied
-    } else if n.ends_with("serviceunknown") || n.ends_with("namehasnoowner") {
+    } else if n.ends_with("serviceunknown")
+        || n.ends_with("namehasnoowner")
+        || n.contains("dbus.error.spawn")
+        || n.contains("spawn")
+        || n.ends_with("noreply")
+        || n.ends_with("disconnected")
+        || (m.starts_with("process ") && m.contains(" exited"))
+    {
+        // Activation of org.rpm.dnf.v0 failed ("Process org.rpm.dnf.v0 exited with status 1").
         BusError::Unavailable(name.to_owned())
     } else if m.contains("cancel") {
         BusError::Cancelled
@@ -29,7 +37,10 @@ pub fn classify_dbus_error(name: &str, message: &str) -> BusError {
 
 fn failure_text(msg: &str) -> InstallError {
     let m = msg.to_ascii_lowercase();
-    if m.contains("conflict") {
+    // dnf words a missing dependency as "conflicting requests - nothing provides ...".
+    if m.contains("nothing provides") {
+        InstallError::MissingDependencies
+    } else if m.contains("conflict") {
         InstallError::Conflicts
     } else if m.contains("no space") || m.contains("disk space") || m.contains("enough space") {
         InstallError::NotEnoughSpace
@@ -77,11 +88,8 @@ pub fn problems_to_error(problems: &[String]) -> Option<InstallError> {
     if problems.is_empty() {
         return None;
     }
-    let joined = problems.join("; ");
-    Some(match failure_text(&joined) {
-        InstallError::Unknown(_) => InstallError::MissingDependencies,
-        other => other,
-    })
+    // Unknown keeps the real cause text in its detail.
+    Some(failure_text(&problems.join("; ")))
 }
 
 fn is_removal(action: &str) -> bool {
@@ -237,9 +245,28 @@ mod tests {
     #[test]
     fn classify() {
         assert_eq!(
-            classify_dbus_error("org.freedesktop.DBus.Error.AccessDenied", ""),
+            classify_dbus_error("org.freedesktop.PolicyKit1.Error.NotAuthorized", ""),
             BusError::AccessDenied
         );
+        assert_eq!(
+            classify_dbus_error("org.freedesktop.DBus.Error.Failed", "Not authorized"),
+            BusError::AccessDenied
+        );
+        // A repo 401 is a failure, not a cancel.
+        assert_eq!(
+            classify_dbus_error(
+                "org.freedesktop.DBus.Error.Failed",
+                "authentication required (401)"
+            ),
+            BusError::Failed("authentication required (401)".into())
+        );
+        assert!(matches!(
+            classify_dbus_error(
+                "org.freedesktop.DBus.Error.Spawn.ChildExited",
+                "Process org.rpm.dnf.v0 exited with status 1"
+            ),
+            BusError::Unavailable(_)
+        ));
         assert!(matches!(
             classify_dbus_error("org.freedesktop.DBus.Error.ServiceUnknown", ""),
             BusError::Unavailable(_)
@@ -284,7 +311,11 @@ mod tests {
             Some(InstallError::MissingDependencies)
         );
         assert_eq!(
-            problems_to_error(&["weird".into()]),
+            problems_to_error(&["weird cause".into()]),
+            Some(InstallError::Unknown("weird cause".into()))
+        );
+        assert_eq!(
+            problems_to_error(&["Problem: conflicting requests - nothing provides x".into()]),
             Some(InstallError::MissingDependencies)
         );
         assert_eq!(
