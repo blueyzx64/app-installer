@@ -227,6 +227,14 @@ export interface TrashCopy {
   system: boolean;
 }
 
+/** Second line of the alert. null = nothing else goes with the app. Plural: 1 item, N items. */
+export function extrasCopy(app: string, alsoRemoves: number): Msg | null {
+  if (alsoRemoves <= 0) return null;
+  return alsoRemoves === 1
+    ? { key: 'trash.body.extras.one', params: { app } }
+    : { key: 'trash.body.extras', params: { app, n: alsoRemoves } };
+}
+
 export function trashCopy(app: Pick<InstalledApp, 'displayName' | 'source'>): TrashCopy {
   const p = { app: app.displayName };
   switch (app.source) {

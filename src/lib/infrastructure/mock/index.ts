@@ -31,7 +31,8 @@ import {
   lumenPreview,
   seedLibrary
 } from './fixtures';
-import { installScript, uninstallScript, type ScriptStep } from './install-script';
+import { installScript, type ScriptStep } from './install-script';
+import { createMockLibrary } from './library-gateway';
 import {
   DEFAULT_SCENARIO,
   launchOverrideFromLocation,
@@ -185,26 +186,15 @@ export function createMockGateways(options: MockOptions = {}): MockGateways {
     }
   };
 
-  const library: LibraryGateway = {
-    async listInstalled() {
-      return [...installed];
+  const library: LibraryGateway = createMockLibrary({
+    scenario,
+    getInstalled: () => installed,
+    setInstalled: (apps) => {
+      installed = apps;
     },
-    async uninstall(appId, onEvent) {
-      const app = installed.find((a) => a.id === appId);
-      if (!app) throw fail('notFound', 'mock: unknown app');
-      const run = runScript<UninstallOutcome>(
-        uninstallScript(app.source === 'systemPackage', scenario),
-        onEvent
-      );
-      const outcome = await run.done;
-      if (outcome.kind === 'removed') installed = installed.filter((a) => a.id !== appId);
-      return outcome;
-    },
-    async launchApp(appId) {
-      if (!installed.some((a) => a.id === appId)) throw fail('notFound');
-      launched.push(appId);
-    }
-  };
+    launched,
+    run: (steps, onEvent) => runScript<UninstallOutcome>(steps, onEvent).done
+  }); // lane S12
 
   const defaults: DefaultsGateway = createMockDefaults(defaultStatus); // lane S13
 
