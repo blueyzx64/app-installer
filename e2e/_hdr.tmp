@@ -1,0 +1,8 @@
+import { expect, test, type Page } from '@playwright/test';
+import en from '../src/lib/i18n/en.json' with { type: 'json' };
+
+/** i18n text with {param} filled in. Specs assert on the same strings the UI shows. */
+function tx(key: keyof typeof en, vars: Record<string, string | number> = {}): string {
+  return String(en[key]).replace(/\{(\w+)\}/g, (_, k: string) => String(vars[k] ?? `{${k}}`));
+}
+const APP = 'Lumen Notes';

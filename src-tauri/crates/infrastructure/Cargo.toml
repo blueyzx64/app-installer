@@ -8,4 +8,10 @@ description = "Adapters that implement the application ports (PackageKit, AppIma
 [dependencies]
 installer-domain.workspace = true
 installer-application.workspace = true
+gio = "0.18" # lane S3b
+serde_json.workspace = true # lane S3b
 # Lanes B and C add zbus, backhand, rpm, gio, ashpd, tokio, serde_json here.
+
+[dev-dependencies]
+tempfile = "3" # lane S3b
+tokio = { workspace = true, features = ["macros", "rt"] }

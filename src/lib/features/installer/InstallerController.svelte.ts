@@ -1,6 +1,14 @@
 // Holds the installer $state and dispatches to the pure machine. Side effects (gateway calls)
 // are started from state transitions. Views call methods and read fields only.
-import { compatCopy, errorCopy, etaCopy, phaseCopy, text } from '$lib/core/copy/copy';
+import {
+  compatCopy,
+  compatKind,
+  errorCopy,
+  etaCopy,
+  phaseCopy,
+  text,
+  type CompatKind
+} from '$lib/core/copy/copy';
 import {
   canCancel,
   initialInstallerState,
@@ -11,10 +19,12 @@ import {
   type InstallerEvent,
   type InstallerState
 } from '$lib/core/domain/installer-machine';
+import { formatBytes, BIG_DOWNLOAD_BYTES } from '$lib/core/domain/format';
 import {
   toCommandError,
   type ErrorCode,
   type InstallEvent,
+  type InstallPhase,
   type PackagePreview
 } from '$lib/core/domain/types';
 import type { Gateways } from '$lib/core/ports';
@@ -29,6 +39,12 @@ export interface IncompatibleView {
   action: 'open' | null;
 }
 
+/** Queue toast text, plain language. */
+export interface QueueNotice {
+  title: string;
+  body: string;
+}
+
 export interface ErrorView {
   message: string;
   action: 'close' | 'tryAgain' | null;
@@ -39,6 +55,8 @@ export interface ErrorView {
 export class InstallerController {
   state = $state.raw<InstallerState>(initialInstallerState);
   launching = $state(false);
+  /** Set when a package was opened while busy and got queued; the route shows a toast. */
+  queueNotice = $state<QueueNotice | null>(null);
 
   readonly #gw: Gateways;
   #closeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -55,14 +73,50 @@ export class InstallerController {
   dragOverFolder = $derived(this.state.tag === 'dragging' && this.state.overFolder);
   queuedCount = $derived(this.state.tag === 'idle' ? 0 : this.state.queued.length);
 
+  iconUrl = $derived(this.preview?.iconDataUrl ?? null);
+  /** System-wide install: the DMG screen shows the password note. */
+  needsPassword = $derived(this.preview?.needsPermission ?? false);
+  /** The permission shade is up. User-scope installs never show it (F-25). */
+  waitingForPermission = $derived(
+    this.state.tag === 'awaitingPermission' && this.state.preview.scope === 'system'
+  );
+  /** DMG screen visible: choose, drag, or waiting for the system dialog. */
+  showDmg = $derived(
+    this.state.tag === 'ready' ||
+      this.state.tag === 'dragging' ||
+      this.state.tag === 'starting' ||
+      this.state.tag === 'awaitingPermission'
+  );
+  /** Phase for the progress screen. User scope never reports permission. */
+  phase = $derived.by<InstallPhase>(() => {
+    const s = this.state;
+    if (s.tag !== 'installing') return 'preparing';
+    return s.phase === 'waitingForPermission' && s.preview.scope === 'user' ? 'preparing' : s.phase;
+  });
+  etaSecs = $derived(this.state.tag === 'installing' ? this.state.etaSecs : null);
+  /** "120 MB" for big downloads only; otherwise null. */
+  sizeLabel = $derived.by<string | null>(() => {
+    const s = this.state;
+    if (s.tag !== 'installing' || !s.plan || s.plan.downloadBytes <= BIG_DOWNLOAD_BYTES)
+      return null;
+    return formatBytes(s.plan.downloadBytes);
+  });
+  incompatibleKind = $derived<CompatKind | null>(
+    this.state.tag === 'incompatible' ? compatKind(this.state.preview.compat) : null
+  );
+  /** The Done screen offers Open only if the app has a launcher. */
+  canLaunch = $derived(this.state.tag === 'succeeded' && this.state.app.canLaunch);
+
   percent = $derived<number | null>(this.state.tag === 'installing' ? this.state.percent : null);
 
   phaseText = $derived.by(() => {
     const s = this.state;
-    if (s.tag === 'awaitingPermission') return t('perm.waiting');
+    if (s.tag === 'awaitingPermission') {
+      return t(s.preview.scope === 'system' ? 'perm.waiting' : 'phase.preparing');
+    }
     if (s.tag === 'starting') return t('phase.preparing');
     if (s.tag === 'installing') {
-      return text(phaseCopy(s.phase, { app: s.preview.displayName, plan: s.plan }));
+      return text(phaseCopy(this.phase, { app: s.preview.displayName, plan: s.plan }));
     }
     return '';
   });
@@ -86,8 +140,11 @@ export class InstallerController {
   });
 
   /** Subscribe to files opened while running. Call in an $effect and return the cleanup. */
-  start(): () => void {
-    const off = this.#gw.installer.onOpenFile((path) => this.open(path));
+  start(onOpened?: () => void): () => void {
+    const off = this.#gw.installer.onOpenFile((path) => {
+      this.open(path);
+      onOpened?.();
+    });
     return () => {
       off();
       this.#clearTimer();
@@ -108,6 +165,10 @@ export class InstallerController {
 
   open(path: string): void {
     this.#dispatch({ type: 'OPEN', path });
+  }
+
+  dismissQueueNotice(): void {
+    this.queueNotice = null;
   }
 
   startDrag(): void {
@@ -196,6 +257,10 @@ export class InstallerController {
     const next = installerMachine(prev, event);
     if (next === prev) return;
     this.state = next;
+    if (event.type === 'OPEN' && next.tag !== 'idle' && next.tag !== 'inspecting') {
+      // Queued behind a drag or an install: tell the person it will come next.
+      this.queueNotice = { title: t('queue.title'), body: t('queue.body') };
+    }
     if (next.tag === 'inspecting' && (prev.tag !== 'inspecting' || prev.path !== next.path)) {
       this.#inspect(next.path);
     } else if (next.tag === 'starting' && prev.tag !== 'starting') {

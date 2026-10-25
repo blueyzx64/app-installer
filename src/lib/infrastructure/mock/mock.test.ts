@@ -144,6 +144,29 @@ describe('mock library', () => {
     expect(events[0]).toMatchObject({ phase: 'waitingForPermission' });
     expect((await g.library.listInstalled()).map((a) => a.id)).toContain('orbit-player');
   });
+  it('uninstallPlan: system apps have extras and need permission, user apps do not', async () => {
+    const g = createMockGateways({ scenario: 'rpm' });
+    expect(await g.library.uninstallPlan('orbit-player')).toEqual({
+      alsoRemoves: 2,
+      needsPermission: true
+    });
+    expect(await g.library.uninstallPlan('pixel-draw')).toEqual({
+      alsoRemoves: 0,
+      needsPermission: false
+    });
+    await expect(g.library.uninstallPlan('zzz')).rejects.toMatchObject({ code: 'notFound' });
+  });
+  it('fail-offline: system removal fails and keeps the app', async () => {
+    const g = createMockGateways({ scenario: 'fail-offline' });
+    const out = g.library.uninstall('orbit-player', () => {});
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(await out).toMatchObject({ kind: 'failed' });
+    expect((await g.library.listInstalled()).map((a) => a.id)).toContain('orbit-player');
+  });
+  it('empty-library lists nothing', async () => {
+    const g = createMockGateways({ scenario: 'empty-library' });
+    expect(await g.library.listInstalled()).toEqual([]);
+  });
   it('launchApp records and rejects unknown ids', async () => {
     const g = createMockGateways({ scenario: 'rpm' });
     await g.library.launchApp('pixel-draw');

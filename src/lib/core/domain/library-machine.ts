@@ -1,4 +1,5 @@
 // Pure reducer for the installed-apps library. See docs/architecture/state-machines.md.
+import type { UninstallPlan } from '../ports/library-gateway';
 import type { CommandError, InstalledApp, UninstallOutcome } from './types';
 
 /** Plain-language toast payload; null when there is nothing to say. */
@@ -8,13 +9,15 @@ export type LibraryState =
   | { tag: 'loading' }
   | { tag: 'empty'; notice: LibraryNotice }
   | { tag: 'listing'; apps: InstalledApp[]; notice: LibraryNotice }
-  | { tag: 'confirming'; apps: InstalledApp[]; app: InstalledApp }
+  /** `plan` is null until the gateway says what removal will touch. CONFIRM waits for it. */
+  | { tag: 'confirming'; apps: InstalledApp[]; app: InstalledApp; plan: UninstallPlan | null }
   | { tag: 'removing'; apps: InstalledApp[]; app: InstalledApp };
 
 export type LibraryEvent =
   | { type: 'LOADED'; apps: InstalledApp[] }
   | { type: 'LOAD_FAILED'; error: CommandError }
   | { type: 'TRASH'; appId: string }
+  | { type: 'PLAN_LOADED'; appId: string; plan: UninstallPlan }
   | { type: 'CANCEL' }
   | { type: 'CONFIRM' }
   | { type: 'UNINSTALL_DONE'; outcome: UninstallOutcome }
@@ -46,7 +49,7 @@ export function libraryMachine(state: LibraryState, event: LibraryEvent): Librar
     case 'listing': {
       if (event.type === 'TRASH') {
         const app = state.apps.find((a) => a.id === event.appId);
-        return app ? { tag: 'confirming', apps: state.apps, app } : state;
+        return app ? { tag: 'confirming', apps: state.apps, app, plan: null } : state;
       }
       if (event.type === 'LOADED') return listOf(event.apps, state.notice);
       if (event.type === 'DISMISS_NOTICE') return { ...state, notice: null };
@@ -55,7 +58,12 @@ export function libraryMachine(state: LibraryState, event: LibraryEvent): Librar
 
     case 'confirming':
       if (event.type === 'CANCEL') return listOf(state.apps);
-      if (event.type === 'CONFIRM') return { tag: 'removing', apps: state.apps, app: state.app };
+      if (event.type === 'PLAN_LOADED' && event.appId === state.app.id) {
+        return { ...state, plan: event.plan };
+      }
+      if (event.type === 'CONFIRM' && state.plan) {
+        return { tag: 'removing', apps: state.apps, app: state.app };
+      }
       return state;
 
     case 'removing': {
