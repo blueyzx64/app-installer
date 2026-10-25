@@ -17,7 +17,8 @@ const FILE_PREFIX: &str = "installer.log";
 const KEEP_FILES: usize = 7;
 /// Per-process cap on bytes written to the log file; later writes are dropped.
 const MAX_FILE_BYTES: u64 = 5 * 1024 * 1024;
-const DEFAULT_FILTER: &str = "info";
+/// Our crates at info, everything else at warn.
+const DEFAULT_FILTER: &str = "warn,installer=info,installer_lib=info,installer_domain=info,installer_application=info,installer_infrastructure=info";
 
 /// Resolve the log directory. `env` is injected so tests need no real env.
 pub fn log_dir(env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {

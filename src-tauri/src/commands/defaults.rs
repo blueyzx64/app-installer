@@ -18,12 +18,15 @@ pub async fn default_handler_status(
 #[tauri::command]
 #[specta::specta]
 pub async fn make_default_handler(state: State<'_, AppState>) -> Result<(), CommandError> {
-    Ok(state.make_default.execute().await?)
+    let result = state.make_default.execute().await;
+    tracing::info!(ok = result.is_ok(), "make_default_handler");
+    Ok(result?)
 }
 
 /// Remembers "Not Now".
 #[tauri::command]
 #[specta::specta]
 pub async fn dismiss_default_prompt(state: State<'_, AppState>) -> Result<(), CommandError> {
+    tracing::info!("dismiss_default_prompt");
     Ok(state.dismiss_prompt.execute().await?)
 }

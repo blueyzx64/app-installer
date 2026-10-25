@@ -24,14 +24,26 @@ pub async fn uninstall(
     on_event: Channel<InstallEvent>,
 ) -> Result<UninstallOutcome, CommandError> {
     let id = app_id.parse()?;
+    tracing::info!(app = %app_id, "uninstall start");
     let observer = ChannelObserver::new(on_event);
-    Ok(state.uninstall_app.execute(&id, &observer).await.into())
+    let outcome: UninstallOutcome = state.uninstall_app.execute(&id, &observer).await.into();
+    match &outcome {
+        UninstallOutcome::Removed => tracing::info!("uninstall removed"),
+        UninstallOutcome::Cancelled => tracing::info!("uninstall cancelled"),
+        UninstallOutcome::Failed { code, .. } => tracing::info!(code = ?code, "uninstall failed"),
+    }
+    Ok(outcome)
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn launch_app(state: State<'_, AppState>, app_id: String) -> Result<(), CommandError> {
-    Ok(state.launch_app.execute(&app_id.parse()?).await?)
+    tracing::info!(app = %app_id, "launch_app");
+    let result = state.launch_app.execute(&app_id.parse()?).await;
+    if let Err(e) = &result {
+        tracing::info!(error = %e, "launch_app failed");
+    }
+    Ok(result?)
 }
 
 /// What removing the app would do. Asked before the confirm sheet (F-42).

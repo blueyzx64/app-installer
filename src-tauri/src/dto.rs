@@ -451,7 +451,7 @@ pub struct WindowControls {
     pub buttons: Vec<ControlButton>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct Appearance {
     pub color_scheme: ColorScheme,
@@ -459,6 +459,8 @@ pub struct Appearance {
     pub accent: Option<String>,
     pub high_contrast: bool,
     pub reduced_motion: bool,
+    /// GNOME text scaling factor, 0.5 to 3.0 (1.0 = normal).
+    pub text_scale: f64,
     pub controls: WindowControls,
 }
 
@@ -473,6 +475,7 @@ impl From<domain::Appearance> for Appearance {
             accent: a.accent.map(|c| c.to_hex()),
             high_contrast: a.high_contrast,
             reduced_motion: a.reduced_motion,
+            text_scale: a.text_scale,
             controls: WindowControls {
                 side: match a.controls.side {
                     Side::Left => ControlSide::Left,
@@ -693,6 +696,7 @@ mod tests {
             j(&Appearance::from(a)),
             json!({"colorScheme": "light", "accent": "#0080FF", "highContrast": false,
                    "reducedMotion": false,
+                   "textScale": 1.0,
                    "controls": {"side": "right", "buttons": ["close"]}})
         );
     }
