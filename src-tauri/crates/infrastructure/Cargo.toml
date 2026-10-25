@@ -26,6 +26,8 @@ gio = "0.22"
 gio-unix = "0.22"
 glib = "0.22"
 image = { version = "0.25", default-features = false, features = ["png"] }
+# lane S7 (appearance)
+ashpd = "0.12"
 # lane S2c
 trait-variant = { workspace = true, optional = true }
 

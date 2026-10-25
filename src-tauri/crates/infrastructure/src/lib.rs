@@ -16,6 +16,7 @@
 //! Never depend on `tauri` here. Never execute a package (ADR-0005).
 #![forbid(unsafe_code)]
 
+pub mod appearance; // lane S7
 pub mod appimage_store; // lane S3
 pub mod defaults; // lane S3b
 pub mod desktop_entries; // lane S3

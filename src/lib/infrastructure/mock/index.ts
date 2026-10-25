@@ -18,6 +18,7 @@ import type {
   WindowGateway
 } from '../../core/ports';
 // lane S13
+import { appearanceFromLocation } from './appearance-params';
 import {
   createMockDefaults,
   defaultScenarioFromLocation,
@@ -115,13 +116,13 @@ export function createMockGateways(options: MockOptions = {}): MockGateways {
         ? null
         : (override.file ?? LUMEN_FILES[formatForScenario(scenario)]);
   const defaultStatus: DefaultStatus = defaultStatusFor(defaultScenarioFromLocation()); // lane S13
-  let appearance: Appearance = {
+  let appearance: Appearance = appearanceFromLocation({
     colorScheme: 'light',
     accent: null,
     highContrast: false,
     reducedMotion: false,
     controls: { side: 'right', buttons: ['close'] }
-  };
+  });
 
   const installer: InstallerGateway = {
     async takeLaunchFile() {
