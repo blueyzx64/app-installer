@@ -147,3 +147,31 @@ fn review_r6_redact_does_not_mangle_sibling_user_dir() {
 fn review_r6_redact_home_root_slash() {
     assert_eq!(redact("/usr/bin/x", Some("/")), "/usr/bin/x");
 }
+
+// ---- re-verification round (logging cases, from swarm/R6/reverify da9bf67) ----
+#[test]
+fn review_r6_rv_redact_needs_left_boundary_too() {
+    // HOME=/home/sam; /var/home/sam/... (Atomic symlink target) or /mnt/home/sam
+    let out = redact("open /var/home/sam/a.rpm", Some("/home/sam"));
+    assert!(!out.contains("/var~"), "mangled: {out}");
+}
+
+#[test]
+fn review_r6_rv_redact_hides_username_in_removable_media_path() {
+    // F-60 "no personal data": open_package span logs the full path (open_package.rs:53)
+    let out = redact(
+        "open_package{path=/run/media/sam/USB/a.rpm}",
+        Some("/home/sam"),
+    );
+    assert!(!out.contains("/sam/"), "username leaked: {out}");
+}
+
+#[test]
+fn review_r6_rv_redact_boundary_variants() {
+    let h = Some("/home/sam");
+    assert_eq!(redact("/home/sam", h), "~");
+    assert_eq!(redact("/home/sam/", h), "~/");
+    assert_eq!(redact("x=/home/sam/a y=/home/sam", h), "x=~/a y=~");
+    assert_eq!(redact("/home/sam.bak/a", h), "/home/sam.bak/a");
+    assert_eq!(redact("/home/sam/home/sam/a", h), "~/home/sam/a");
+}
