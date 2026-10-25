@@ -1,0 +1,21 @@
+[package]
+name = "installer-application"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Use cases and port traits for the installer. No IO."
+
+[features]
+# Fakes for every port, for use-case tests here and in other crates.
+testing = []
+
+[dependencies]
+installer-domain = { path = "../domain" }
+tracing = "0.1"
+trait-variant = "0.1"
+# CancellationToken only (tokio-util::sync). No runtime is started here.
+tokio-util = { version = "0.7", default-features = false }
+
+[dev-dependencies]
+installer-application = { path = ".", features = ["testing"] }
+tokio = { version = "1", features = ["rt", "macros", "time"] }

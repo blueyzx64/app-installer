@@ -20,8 +20,10 @@ If you need IO in domain or application, you need a **port**. Define the trait i
 ## Style
 - Edition 2024, `#![forbid(unsafe_code)]` in domain/application/infrastructure.
 - Errors: `thiserror` enums per layer (`InspectError`, `BackendError`, `InstallError`). No `anyhow` outside `src-tauri/src/main.rs`. Never use `unwrap()`/`expect()` in non-test code, except for invariants proven locally (add a comment).
-- Async: tokio. Use native `async fn` in traits plus `#[trait_variant::make(Send)]`. Store ports as `Arc<dyn …>` only where needed; otherwise use generics on use cases.
-- Cancellation: pass `CancellationToken`, and `select!` on it in long adapter loops.
+- Async (decided, W0): tokio in infrastructure and the shell only. Async ports use native `async fn` in traits plus `#[trait_variant::make(Send)]`, declared as `pub trait Port: Sync` (the macro adds `Send`). Do not use `async_trait`. These traits are **not** object safe, so use cases are generic over their ports and hold them as `Arc<P>`; the composition root names the concrete types. Only sync callback ports are `dyn`: `InstallObserver`, `AppearanceObserver` (passed as `&dyn` / `Arc<dyn>`). Never hold a `std::sync` guard across an `.await`.
+- Cancellation (decided, W0): `installer_application::CancelToken` is a re-export of `tokio_util::sync::CancellationToken` (no runtime is started in application). Adapters `select!` on `cancelled()` in long loops. A cancel or a dismissed polkit dialog returns `InstallError::Cancelled`, which use cases turn into `Outcome::Cancelled`, never `Failed`.
+- Use cases: one struct per use case, `new(Arc<port>, ...)`, one `execute`. Install and uninstall return an outcome enum (no `Result`), so failure and cancel are data.
+- Fakes: `installer-application` feature `testing` exports a fake per port (`FakeSystemPackages`, `FakeLedger`, ...). Other crates enable it in `[dev-dependencies]`.
 - Logging: `tracing` spans per use case (`#[tracing::instrument(skip(self, observer))]`). Never log file contents.
 - Newtypes for IDs (`PreviewId`, `AppId`) and validated strings (`Slug`).
 - Domain functions are pure and synchronous.
