@@ -83,7 +83,7 @@ where
         check_cancel(cancel)?;
 
         let mut app = InstalledApp {
-            id: AppId::from_name(&meta.name),
+            id: self.free_id(&meta.name).await,
             name: meta.name.clone(),
             display_name: meta.display_name.clone(),
             version: meta.version.clone(),
@@ -136,6 +136,40 @@ where
             tracing::warn!(error = %e, "could not record installed app");
         }
         Ok(app)
+    }
+}
+
+impl<S, U, D, L, C> InstallPackage<S, U, D, L, C>
+where
+    L: AppLedger,
+{
+    /// Slug for `name`. If the ledger holds that slug for a different app,
+    /// append `-2`, `-3`, ... until it is free. The same app keeps its id (updates).
+    async fn free_id(&self, name: &str) -> AppId {
+        let base = AppId::from_name(name);
+        let taken = match self.ledger.list().await {
+            Ok(apps) => apps,
+            Err(e) => {
+                tracing::warn!(error = %e, "could not read ledger for id check");
+                return base;
+            }
+        };
+        let free = |id: &AppId| taken.iter().all(|a| &a.id != id || a.name == name);
+        if free(&base) {
+            return base;
+        }
+        for n in 2_u32.. {
+            let suffix = format!("-{n}");
+            let room = 64 - suffix.len();
+            let stem: String = base.as_str().chars().take(room).collect();
+            let candidate = format!("{}{suffix}", stem.trim_end_matches('-'));
+            if let Ok(id) = candidate.parse::<AppId>()
+                && free(&id)
+            {
+                return id;
+            }
+        }
+        base
     }
 }
 
@@ -202,6 +236,37 @@ mod tests {
                 needs_permission: scope.needs_permission(),
             })
         }
+    }
+
+    #[tokio::test]
+    async fn colliding_slug_of_a_different_app_gets_a_suffix() {
+        let rig = Rig::new();
+        let mut other = sample_app("lumen-notes", "1", AppSource::AppImage);
+        other.name = "Lumen Notes".into(); // same slug, different app
+        rig.ledger.seed(other);
+        let mut other2 = sample_app("lumen-notes-2", "1", AppSource::AppImage);
+        other2.name = "lumen_notes".into();
+        rig.ledger.seed(other2);
+        let p = rig.preview(PackageFormat::AppImage, Compatibility::Ok);
+
+        let InstallOutcome::Installed(app) = rig.uc().execute(p.id, &rig.observer).await else {
+            panic!("expected installed");
+        };
+        assert_eq!(app.id.as_str(), "lumen-notes-3");
+        assert_eq!(rig.ledger.apps().len(), 3);
+    }
+
+    #[tokio::test]
+    async fn same_app_keeps_its_id_on_update() {
+        let rig = Rig::new();
+        rig.ledger
+            .seed(sample_app("lumen-notes", "1", AppSource::AppImage));
+        let p = rig.preview(PackageFormat::AppImage, Compatibility::Ok);
+
+        let InstallOutcome::Installed(app) = rig.uc().execute(p.id, &rig.observer).await else {
+            panic!("expected installed");
+        };
+        assert_eq!(app.id.as_str(), "lumen-notes");
     }
 
     #[tokio::test]
