@@ -460,6 +460,7 @@ pub struct Appearance {
     pub high_contrast: bool,
     pub reduced_motion: bool,
     /// GNOME text scaling factor, 0.5 to 3.0 (1.0 = normal).
+    #[specta(type = Number)]
     pub text_scale: f64,
     pub controls: WindowControls,
 }

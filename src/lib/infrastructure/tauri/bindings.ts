@@ -40,7 +40,7 @@ export type Appearance = {
 	accent: string | null,
 	highContrast: boolean,
 	reducedMotion: boolean,
-	/**  GNOME text scaling factor, 0.5 to 3.0. */
+	/**  GNOME text scaling factor, 0.5 to 3.0 (1.0 = normal). */
 	textScale: number,
 	controls: WindowControls,
 };

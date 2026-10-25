@@ -49,7 +49,7 @@ type Appearance = GnomeAppearanceSource;
 
 pub type OpenPackageUc = OpenPackage<Probe, Inspector, Host, System, Ledger>;
 pub type InstallPackageUc = InstallPackage<System, User, Desktop, Ledger, SystemClock>;
-pub type ListInstalledUc = ListInstalledApps<User, Ledger, System>;
+pub type ListInstalledUc = ListInstalledApps<User, Ledger, System, Desktop>;
 pub type UninstallAppUc = UninstallApp<System, User, Desktop, Ledger>;
 pub type UninstallPlanUc = UninstallPlan<System, Ledger>;
 pub type LaunchAppUc = LaunchApp<Ledger, Launch>;
@@ -136,7 +136,12 @@ pub fn build_state(launch_file: Option<PathBuf>) -> AppState {
             registry.clone(),
         ),
         cancel_install: CancelInstall::new(registry.clone()),
-        list_installed: ListInstalledApps::new(user.clone(), ledger.clone(), system.clone()),
+        list_installed: ListInstalledApps::new(
+            user.clone(),
+            ledger.clone(),
+            system.clone(),
+            desktop.clone(),
+        ),
         uninstall_plan: UninstallPlan::new(system.clone(), ledger.clone()),
         uninstall_app: UninstallApp::new(system, user, desktop, ledger.clone())
             .with_registry(registry.clone()),
