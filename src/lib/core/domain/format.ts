@@ -20,10 +20,7 @@ export function formatBytes(bytes: number): string {
 export const BIG_DOWNLOAD_BYTES = 50_000_000;
 
 export type EtaBucket =
-  | { kind: 'unknown' }
-  | { kind: 'seconds' }
-  | { kind: 'minute' }
-  | { kind: 'minutes'; n: number };
+  { kind: 'unknown' } | { kind: 'seconds' } | { kind: 'minute' } | { kind: 'minutes'; n: number };
 
 /**
  * ETA seconds to a phrase bucket:

@@ -31,11 +31,7 @@ export interface PackagePreview {
 }
 
 export type InstallPhase =
-  | 'preparing'
-  | 'waitingForPermission'
-  | 'downloading'
-  | 'installing'
-  | 'finishing';
+  'preparing' | 'waitingForPermission' | 'downloading' | 'installing' | 'finishing';
 
 export type InstallEvent =
   | { kind: 'plan'; extraPackages: number; downloadBytes: number }

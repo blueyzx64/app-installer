@@ -1,6 +1,6 @@
 // The ONLY place that maps domain enums to i18n keys. Exhaustive: adding a variant is a compile error
 // until copy exists. Returns key + params; callers resolve with t().
-import type { MessageKey, MessageParams } from '../../i18n';
+import { t, type MessageKey, type MessageParams } from '../../i18n';
 import { BIG_DOWNLOAD_BYTES, etaBucket, formatBytes } from '../domain/format';
 import type { Compatibility, ErrorCode, InstallPhase, InstalledApp, Plan } from '../domain/types';
 
@@ -141,7 +141,10 @@ export function errorCopy(code: ErrorCode, ctx: { app: string; spaceBytes?: numb
   const table = {
     permissionDenied: { message: { key: 'error.permissionDenied' }, action: 'close' },
     offline: { message: { key: 'error.offline', params: p }, action: 'tryAgain' },
-    missingDependencies: { message: { key: 'error.missingDependencies', params: p }, action: 'close' },
+    missingDependencies: {
+      message: { key: 'error.missingDependencies', params: p },
+      action: 'close'
+    },
     conflicts: { message: { key: 'error.conflicts', params: p }, action: 'close' },
     notEnoughSpace:
       ctx.spaceBytes === undefined
@@ -213,4 +216,9 @@ export function trashCopy(app: Pick<InstalledApp, 'displayName' | 'source'>): Tr
     default:
       return assertNever(app.source);
   }
+}
+
+/** Resolve a Msg to display text. */
+export function text(m: Msg): string {
+  return t(m.key, m.params);
 }
