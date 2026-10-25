@@ -13,8 +13,9 @@
     "format": "prettier --write .",
     "lint:copy": "node scripts/lint-copy.mjs",
     "test": "vitest run && node --test \"scripts/*.test.mjs\"",
-    "tauri": "tauri",
     "e2e": "playwright test",
+    "test:integration": "bash scripts/test-integration.sh",
+    "tauri": "tauri",
     "bindings": "cd src-tauri && cargo run --bin export-bindings"
   },
   "devDependencies": {
@@ -23,7 +24,7 @@
     "@sveltejs/adapter-static": "^3.0.10",
     "@sveltejs/kit": "^2.70.3",
     "@sveltejs/vite-plugin-svelte": "^6.2.4",
-    "@tauri-apps/cli": "^2.12.4",
+    "@tauri-apps/cli": "~2.11.5",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/svelte": "^5.4.2",
     "eslint": "^9.39.5",
@@ -40,6 +41,6 @@
     "vitest": "^3.2.7"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.12.4"
+    "@tauri-apps/api": "~2.11.1"
   }
 }

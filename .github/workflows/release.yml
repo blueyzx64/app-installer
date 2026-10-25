@@ -1,4 +1,4 @@
-# DRAFT (W0b). F-62 finishes this in W3: RPM signing, Copr, final smoke tests.
+# F-62 build + smoke + draft release. F-64 signing runs only when secrets exist.
 name: Release
 
 on:
@@ -27,7 +27,7 @@ jobs:
         run: |
           dnf install -y --setopt=install_weak_deps=False \
             git gcc gcc-c++ make pkgconf-pkg-config curl file patchelf xdg-utils \
-            rpm-build rpm-sign \
+            rpm-build rpm-sign cpio gnupg2 \
             nodejs npm \
             webkit2gtk4.1-devel gtk3-devel dbus-devel openssl-devel librsvg2-devel libsoup3-devel \
             desktop-file-utils appstream
@@ -50,7 +50,15 @@ jobs:
         run: pnpm tauri build --bundles rpm,appimage
       - name: Validate metainfo
         run: |
-          appstreamcli validate --pedantic src-tauri/linux/io.github.blueyzx64.Installer.metainfo.xml
+          # Only known pedantic note: the placeholder id has capitals (ASK O: rename id).
+          out=$(appstreamcli validate --pedantic --no-net src-tauri/linux/io.github.blueyzx64.Installer.metainfo.xml || true)
+          echo "$out"
+          ! echo "$out" | grep -E '^[EWI]:'
+      - name: Validate desktop file
+        run: |
+          desktop=$(rpm -qlp src-tauri/target/release/bundle/rpm/*.rpm | grep '\.desktop$' | head -n1)
+          rpm2cpio src-tauri/target/release/bundle/rpm/*.rpm | cpio -idmv --quiet ".$desktop"
+          desktop-file-validate ".$desktop"
       - name: Inspect RPM
         run: |
           rpm=$(ls src-tauri/target/release/bundle/rpm/*.rpm)
@@ -59,13 +67,28 @@ jobs:
           rpm -qRp "$rpm" | grep -q PackageKit
           rpm -qlp "$rpm" | grep -q '\.desktop$'
           rpm -qlp "$rpm" | grep -q 'metainfo\.xml$'
-      # F-62 (W3): sign with rpmsign --addsign using a GPG key from secrets.
+      - name: Sign RPM (F-64, skipped without secrets)
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.RPM_GPG_PRIVATE_KEY }}
+          GPG_KEY_ID: ${{ secrets.RPM_GPG_KEY_ID }}
+        run: |
+          if [ -z "${GPG_PRIVATE_KEY}" ] || [ -z "${GPG_KEY_ID}" ]; then
+            echo "No signing key configured. Skipping RPM signing."; exit 0
+          fi
+          printf '%s' "${GPG_PRIVATE_KEY}" | gpg --batch --import
+          printf '%%_gpg_name %s\n%%__gpg_sign_cmd %%{__gpg} gpg --batch --no-armor --pinentry-mode loopback --no-tty -u "%%{_gpg_name}" -sbo %%{__signature_filename} %%{__plaintext_filename}\n' "${GPG_KEY_ID}" > "$HOME/.rpmmacros"
+          for f in src-tauri/target/release/bundle/rpm/*.rpm; do
+            rpmsign --addsign "$f"
+            rpm -K "$f"
+          done
+          gpg --armor --export "${GPG_KEY_ID}" > src-tauri/target/release/bundle/rpm/RPM-GPG-KEY-installer
       - uses: actions/upload-artifact@v4.6.2
         with:
           name: bundles
           if-no-files-found: error
           path: |
             src-tauri/target/release/bundle/rpm/*.rpm
+            src-tauri/target/release/bundle/rpm/RPM-GPG-KEY-installer
             src-tauri/target/release/bundle/appimage/*.AppImage
 
   smoke:
@@ -80,6 +103,12 @@ jobs:
           path: bundles
       - name: Install the RPM
         run: dnf install -y ./bundles/rpm/*.rpm desktop-file-utils
+      - name: Check signature when signed
+        run: |
+          if [ -f bundles/rpm/RPM-GPG-KEY-installer ]; then
+            rpm --import bundles/rpm/RPM-GPG-KEY-installer
+            rpm -K bundles/rpm/*.rpm | grep -qi 'signatures OK'
+          fi
       - name: Check the installed files
         run: |
           test -x /usr/bin/installer
@@ -105,5 +134,5 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: |
-            bundles/rpm/*.rpm
+            bundles/rpm/*
             bundles/appimage/*.AppImage

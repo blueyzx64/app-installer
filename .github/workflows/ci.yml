@@ -94,3 +94,20 @@ jobs:
         run: pnpm bindings
       - name: Fail if bindings.ts is out of date
         run: git diff --exit-code -- src/lib/infrastructure/tauri/bindings.ts
+
+  e2e:
+    name: End-to-end (Playwright)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: pnpm/action-setup@v4.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # S9: browsers are not part of pnpm install.
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm e2e
