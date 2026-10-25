@@ -51,7 +51,7 @@
     animation: var(--anim-fade);
   }
   .alert {
-    width: 300px;
+    width: var(--w-alert);
     max-width: calc(100% - 2 * var(--sp-4));
     padding: var(--sp-6) var(--sp-5) 18px;
     display: flex;

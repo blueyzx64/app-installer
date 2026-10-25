@@ -49,7 +49,7 @@
     position: absolute;
     top: 0;
     left: 50%;
-    width: 340px;
+    width: var(--w-sheet);
     max-width: 100%;
     padding: 22px 22px 18px;
     display: flex;
@@ -72,7 +72,7 @@
     font-weight: 700;
   }
   p {
-    margin-top: 6px;
+    margin-top: var(--sp-1);
     font-size: var(--fs-subhead);
     line-height: var(--lh-subhead);
     color: var(--label-secondary);

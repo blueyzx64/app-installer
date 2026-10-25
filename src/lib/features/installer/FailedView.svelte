@@ -55,14 +55,14 @@
     animation: var(--anim-rise);
   }
   .message {
-    max-width: 380px;
+    max-width: var(--w-copy);
     font-size: var(--fs-title-3);
     line-height: var(--lh-title-3);
     font-weight: 700;
   }
   .buttons {
     display: flex;
-    gap: 10px;
-    margin-top: 10px;
+    gap: var(--gap-row);
+    margin-top: var(--gap-row);
   }
 </style>

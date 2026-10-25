@@ -27,6 +27,22 @@ describe('ProgressView', () => {
   });
 });
 
+describe('ProgressView cancel', () => {
+  it('shows Cancel only when canCancel is true and calls oncancel', async () => {
+    const oncancel = vi.fn();
+    const { rerender } = render(ProgressView, {
+      appName: 'A',
+      percent: 5,
+      phaseText: 'x',
+      oncancel
+    });
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    await rerender({ appName: 'A', percent: 5, phaseText: 'x', canCancel: true, oncancel });
+    await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(oncancel).toHaveBeenCalledOnce();
+  });
+});
+
 describe('DoneView', () => {
   it('offers Open as the focused primary action and Done as the other', async () => {
     const onopen = vi.fn();

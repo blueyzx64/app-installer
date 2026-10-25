@@ -63,21 +63,21 @@
     animation: var(--anim-pop);
   }
   h2 {
-    margin-top: 6px;
+    margin-top: var(--sp-1);
     font-size: var(--fs-title-2);
     line-height: var(--lh-title-2);
     font-weight: 700;
     animation: var(--anim-rise);
   }
   p {
-    max-width: 380px;
+    max-width: var(--w-copy);
     line-height: 1.5;
     color: var(--label-secondary);
     animation: var(--anim-rise);
   }
   .buttons {
     display: flex;
-    gap: 10px;
-    margin-top: 10px;
+    gap: var(--gap-row);
+    margin-top: var(--gap-row);
   }
 </style>

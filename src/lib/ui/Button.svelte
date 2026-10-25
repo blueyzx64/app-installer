@@ -41,7 +41,7 @@
   .btn {
     position: relative;
     min-height: var(--button-min);
-    min-width: 88px;
+    min-width: var(--w-button-min);
     padding: 0 var(--sp-4);
     border: 0;
     border-radius: var(--r-button);

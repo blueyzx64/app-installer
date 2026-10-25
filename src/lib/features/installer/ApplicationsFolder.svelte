@@ -29,7 +29,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 10px;
+    gap: var(--gap-row);
   }
   .tile {
     width: var(--icon-dmg);

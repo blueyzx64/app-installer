@@ -43,7 +43,7 @@
     top: 36px;
     right: 14px;
     z-index: 5;
-    width: 300px;
+    width: var(--w-toast);
     max-width: calc(100% - 28px);
     padding: 12px 14px;
     display: flex;
