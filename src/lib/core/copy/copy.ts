@@ -190,10 +190,15 @@ export function errorCopy(code: ErrorCode, ctx: { app: string; spaceBytes?: numb
     untrustedSource: { message: { key: 'error.untrustedSource', params: p }, action: 'close' },
     backendUnavailable: { message: { key: 'error.backendUnavailable' }, action: 'close' },
     notFound: { message: { key: 'error.notFound', params: p }, action: 'close' },
-    busy: { message: { key: 'error.busy', params: p }, action: null },
+    busy: { message: { key: 'error.busy' }, action: 'close' },
     unknown: { message: { key: 'error.unknown', params: p }, action: 'tryAgain' }
   } as const satisfies Record<ErrorCode, ErrorCopy>;
-  return table[code];
+  const entry: ErrorCopy = table[code];
+  // No app name yet (the file could not be read): use the wording that doesn't need one.
+  if (!ctx.app && entry.message.params && 'app' in entry.message.params) {
+    return { ...entry, message: { key: `${entry.message.key}.noApp` as MessageKey } };
+  }
+  return entry;
 }
 
 /** Toast text when removing an app failed. Plain, no codes. */

@@ -12,7 +12,7 @@ const base: Appearance = {
 
 describe('appearanceFromSearch', () => {
   it('keeps defaults with no params', () => {
-    expect(appearanceFromSearch('', base)).toEqual(base);
+    expect(appearanceFromSearch('', base)).toEqual({ ...base, textScale: 1 });
   });
   it('mac layout', () => {
     const a = appearanceFromSearch('?side=left&buttons=close,minimize,maximize', base);
@@ -24,5 +24,14 @@ describe('appearanceFromSearch', () => {
   });
   it('scheme', () => {
     expect(appearanceFromSearch('?scheme=dark', base).colorScheme).toBe('dark');
+  });
+
+  it('motion and textScale', () => {
+    expect(appearanceFromSearch('?motion=reduce', base).reducedMotion).toBe(true);
+    expect(appearanceFromSearch('?motion=full', base).reducedMotion).toBe(false);
+    const a = appearanceFromSearch('?textScale=1.25', base) as { textScale?: number };
+    expect(a.textScale).toBe(1.25);
+    const b = appearanceFromSearch('?textScale=9', base) as { textScale?: number };
+    expect(b.textScale).toBe(3);
   });
 });

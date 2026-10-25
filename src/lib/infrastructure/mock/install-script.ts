@@ -23,7 +23,9 @@ function progress(
   percent: number | null,
   etaSecs: number | null
 ): ScriptStep<never> {
-  return { at, event: { kind: 'progress', phase, percent, etaSecs, allowCancel: false } };
+  // PackageKit allows a cancel while downloading, not once it is installing.
+  const allowCancel = phase === 'downloading';
+  return { at, event: { kind: 'progress', phase, percent, etaSecs, allowCancel } };
 }
 
 /** `count` evenly spaced progress steps for one phase, 100/count .. 100 percent. */

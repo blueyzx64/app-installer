@@ -257,4 +257,28 @@ describe('InstallerController', () => {
     await settle(OPEN_APP_CLOSE_MS);
     expect(c.state.tag).toBe('idle');
   });
+
+  it('cancel() works while downloading (allowCancel) and not once installing', async () => {
+    const { c } = await setup('rpm');
+    c.keyInstall();
+    await settle(2600);
+    expect(c.allowCancel).toBe(true);
+    c.cancel();
+    await settle(50);
+    expect(c.state.tag).toBe('ready');
+    c.keyInstall();
+    await settle(5600);
+    expect(c.state.tag).toBe('installing');
+    expect(c.allowCancel).toBe(false);
+    expect(c.canCancel).toBe(false);
+  });
+
+  it('inspect failure reads as a sentence without an app name', async () => {
+    const gw = createMockGateways({ scenario: 'rpm', launchFile: null });
+    gw.installer.openPackage = () => Promise.reject({ code: 'notFound', detail: null });
+    const c = new InstallerController(gw);
+    c.open('/gone.rpm');
+    await settle(10);
+    expect(c.error?.message).toBe('We couldn’t find this file. It may have been moved or removed.');
+  });
 });

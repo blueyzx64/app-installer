@@ -2,6 +2,7 @@
   import AppIcon from '$lib/ui/AppIcon.svelte';
   import ProgressBar from '$lib/ui/ProgressBar.svelte';
   import { t } from '$lib/i18n';
+  import Button from '$lib/ui/Button.svelte';
 
   /** Renders only the text the controller gives it. */
   interface Props {
@@ -11,9 +12,20 @@
     percent: number | null;
     phaseText: string;
     etaText?: string;
+    /** The backend accepts a cancel right now (F-28). */
+    canCancel?: boolean;
+    oncancel?: () => void;
   }
 
-  let { appName, iconUrl = null, percent, phaseText, etaText = '' }: Props = $props();
+  let {
+    appName,
+    iconUrl = null,
+    percent,
+    phaseText,
+    etaText = '',
+    canCancel = false,
+    oncancel
+  }: Props = $props();
 </script>
 
 <div class="view">
@@ -26,6 +38,9 @@
       <span class="eta tabular">{etaText}</span>
     </div>
   </div>
+  {#if canCancel && oncancel}
+    <Button onclick={oncancel}>{t('action.cancel')}</Button>
+  {/if}
 </div>
 
 <style>

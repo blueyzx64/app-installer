@@ -53,6 +53,10 @@ export interface ErrorView {
   detail: string | null;
 }
 
+function queuedOf(s: InstallerState): number {
+  return s.tag === 'idle' ? 0 : s.queued.length;
+}
+
 export class InstallerController {
   state = $state.raw<InstallerState>(initialInstallerState);
   launching = $state(false);
@@ -95,6 +99,8 @@ export class InstallerController {
     if (s.tag !== 'installing') return 'preparing';
     return s.phase === 'waitingForPermission' && s.preview.scope === 'user' ? 'preparing' : s.phase;
   });
+  /** The backend accepts a cancel during download/install (F-28). */
+  allowCancel = $derived(this.state.tag === 'installing' && this.state.allowCancel);
   etaSecs = $derived(this.state.tag === 'installing' ? this.state.etaSecs : null);
   /** "120 MB" for big downloads only; otherwise null. */
   sizeLabel = $derived.by<string | null>(() => {
@@ -199,7 +205,12 @@ export class InstallerController {
     this.#dispatch({ type: 'KEY_INSTALL' });
   }
 
+  /** Cancel (permission shade, or progress while the backend allows it). */
   cancelInstall(): void {
+    this.cancel();
+  }
+
+  cancel(): void {
     if (!this.canCancel) return;
     const p = previewOf(this.state);
     if (!p) return;
@@ -273,7 +284,7 @@ export class InstallerController {
     const next = installerMachine(prev, event);
     if (next === prev) return;
     this.state = next;
-    if (event.type === 'OPEN' && next.tag !== 'idle' && next.tag !== 'inspecting') {
+    if (event.type === 'OPEN' && next.tag !== 'idle' && queuedOf(next) > queuedOf(prev)) {
       // Queued behind a drag or an install: tell the person it will come next.
       this.queueNotice = { title: t('queue.title'), body: t('queue.body') };
     }
@@ -311,7 +322,8 @@ export class InstallerController {
           type: 'PROGRESS',
           phase: e.phase,
           percent: e.percent,
-          etaSecs: e.etaSecs
+          etaSecs: e.etaSecs,
+          allowCancel: e.allowCancel
         });
       }
     };

@@ -114,7 +114,7 @@ describe('errorCopy', () => {
     expect(action('notEnoughSpace')).toBe('tryAgain');
     expect(action('permissionDenied')).toBe('close');
     expect(action('corruptFile')).toBe('close');
-    expect(action('busy')).toBeNull();
+    expect(action('busy')).toBe('close');
   });
   it('notEnoughSpace uses the size when known', () => {
     expect(text(errorCopy('notEnoughSpace', { app, spaceBytes: 120_000_000 }).message)).toBe(

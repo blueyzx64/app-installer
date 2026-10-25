@@ -1,5 +1,7 @@
 <script lang="ts">
   // Install window: drives S6's views from InstallerController. No logic here beyond wiring.
+  import { goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
   import { useControllers } from '$lib/app/context';
   import { t } from '$lib/i18n';
   import DmgView from '$lib/features/installer/DmgView.svelte';
@@ -15,6 +17,17 @@
   import Toast from '$lib/ui/Toast.svelte';
 
   const { installer, defaultHandler } = useControllers();
+
+  // Nothing opened (direct visit, or the window stayed open after Close): show the library.
+  $effect(() => {
+    if (installer.state.tag === 'idle') {
+      try {
+        goto(resolve('/library'), { replaceState: true }).catch(() => {});
+      } catch {
+        /* no router (component tests) */
+      }
+    }
+  });
 </script>
 
 <main class="install" data-state={installer.state.tag}>
@@ -34,6 +47,8 @@
       appName={installer.appName}
       iconUrl={installer.iconUrl}
       percent={installer.percent}
+      canCancel={installer.allowCancel}
+      oncancel={() => installer.cancel()}
       phaseText={installer.phaseText}
       etaText={installer.etaText}
     />
@@ -54,8 +69,11 @@
       onclose={() => installer.close()}
       onopen={() => installer.openInstalled()}
     />
-  {:else if installer.state.tag === 'inspecting'}
-    <div class="center"><Spinner size={20} label={t('phase.preparing')} /></div>
+  {:else if installer.state.tag === 'inspecting' || installer.state.tag === 'idle'}
+    <div class="center">
+      <Spinner size={20} />
+      <span class="sr-only">{t('phase.preparing')}</span>
+    </div>
   {:else if installer.error}
     {@const err = installer.error}
     <Alert title={err.message} oncancel={() => installer.close()}>

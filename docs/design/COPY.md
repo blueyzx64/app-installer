@@ -62,8 +62,10 @@ All strings live in `src/lib/i18n/en.json`. `core/copy/copy.ts` maps domain enum
 | `corruptFile` | This file is damaged or isn't an app. Try downloading it again. | Close |
 | `untrustedSource` | {app} isn't from a known developer. | Close (later: Install Anyway) |
 | `backendUnavailable` | Installing apps isn't available right now. Restart your computer and try again. | Close |
-| `busy` | Another app is being installed. {app} will start when it's done. | (none) |
+| `busy` | Another app is being installed right now. Try again when it's finished. | Close |
 | `unknown` | Something went wrong while installing {app}. | Try Again |
+
+When the file could not be read there is no app name yet. Messages that use `{app}` then use their `.noApp` variant ("this app" / "this file").
 
 Every error view has a collapsed **Details** disclosure with the technical code, the backend message and the log path. That is the only place technical text appears.
 

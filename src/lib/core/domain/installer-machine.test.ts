@@ -42,7 +42,17 @@ const awaiting: InstallerState = { tag: 'awaitingPermission', preview: P, queued
 const installing = (
   percent: number | null = 10,
   phase: 'downloading' | 'installing' = 'downloading'
-) => ({ tag: 'installing', preview: P, phase, percent, etaSecs: 5, queued: [] }) as InstallerState;
+) =>
+  ({
+    tag: 'installing',
+    preview: P,
+    phase,
+    percent,
+    peak: percent ?? 0,
+    etaSecs: 5,
+    allowCancel: phase === 'downloading',
+    queued: []
+  }) as InstallerState;
 const succeeded: InstallerState = { tag: 'succeeded', preview: P, app, queued: [] };
 const incompatible: InstallerState = {
   tag: 'incompatible',
