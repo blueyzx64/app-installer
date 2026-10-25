@@ -3,31 +3,35 @@ use std::sync::Arc;
 
 use installer_domain::{AppId, AppSource, BackendError, InstalledApp};
 
-use crate::ports::{AppLedger, SystemPackages, UserApps};
+use crate::ports::{AppLedger, DesktopIntegration, SystemPackages, UserApps};
 
 /// The apps we installed, with the ledger reconciled against reality.
 ///
 /// - AppImage apps: kept if the store still has them; apps found in the store but
-///   missing from the ledger are added to it; ledger entries whose file is gone are forgotten.
+///   missing from the ledger are added to it; ledger entries whose file is gone are forgotten
+///   and their desktop entry and icons removed (best effort).
 /// - System packages: kept while the package is installed. If the backend cannot
 ///   answer, the entry is kept (a broken backend must not wipe the library).
-pub struct ListInstalledApps<U, L, S> {
+pub struct ListInstalledApps<U, L, S, D> {
     user: Arc<U>,
     ledger: Arc<L>,
     system: Arc<S>,
+    desktop: Arc<D>,
 }
 
-impl<U, L, S> ListInstalledApps<U, L, S>
+impl<U, L, S, D> ListInstalledApps<U, L, S, D>
 where
     U: UserApps,
     L: AppLedger,
     S: SystemPackages,
+    D: DesktopIntegration,
 {
-    pub fn new(user: Arc<U>, ledger: Arc<L>, system: Arc<S>) -> Self {
+    pub fn new(user: Arc<U>, ledger: Arc<L>, system: Arc<S>, desktop: Arc<D>) -> Self {
         Self {
             user,
             ledger,
             system,
+            desktop,
         }
     }
 
@@ -58,8 +62,16 @@ where
             };
             if keep {
                 result.push(app);
-            } else if let Err(e) = self.ledger.forget(&app.id).await {
-                tracing::warn!(error = %e, "could not forget stale app");
+            } else {
+                if app.source == AppSource::AppImage {
+                    // File is gone: drop the menu entry and icons too.
+                    if let Err(e) = self.desktop.remove_entry(&app).await {
+                        tracing::warn!(error = %e, "could not remove stale desktop entry");
+                    }
+                }
+                if let Err(e) = self.ledger.forget(&app.id).await {
+                    tracing::warn!(error = %e, "could not forget stale app");
+                }
             }
         }
 
@@ -87,6 +99,7 @@ mod tests {
         user: Arc<FakeUserApps>,
         ledger: Arc<FakeLedger>,
         system: Arc<FakeSystemPackages>,
+        desktop: Arc<FakeDesktop>,
     }
 
     impl Rig {
@@ -95,10 +108,18 @@ mod tests {
                 user: Arc::new(FakeUserApps::default()),
                 ledger: Arc::new(FakeLedger::default()),
                 system: Arc::new(FakeSystemPackages::default()),
+                desktop: Arc::new(FakeDesktop::default()),
             }
         }
-        fn uc(&self) -> ListInstalledApps<FakeUserApps, FakeLedger, FakeSystemPackages> {
-            ListInstalledApps::new(self.user.clone(), self.ledger.clone(), self.system.clone())
+        fn uc(
+            &self,
+        ) -> ListInstalledApps<FakeUserApps, FakeLedger, FakeSystemPackages, FakeDesktop> {
+            ListInstalledApps::new(
+                self.user.clone(),
+                self.ledger.clone(),
+                self.system.clone(),
+                self.desktop.clone(),
+            )
         }
     }
 
@@ -138,6 +159,20 @@ mod tests {
         let apps = rig.uc().execute().await.unwrap();
         assert!(apps.is_empty());
         assert!(rig.ledger.apps().is_empty(), "ledger cleaned");
+        assert_eq!(
+            rig.desktop.calls(),
+            ["remove gone-image"],
+            "menu entry removed for the AppImage only"
+        );
+    }
+
+    #[tokio::test]
+    async fn desktop_cleanup_failure_still_forgets() {
+        let rig = Rig::new();
+        rig.ledger.seed(sample_app("img", "1", AppSource::AppImage));
+        rig.desktop.fail_remove(InstallError::Unknown("x".into()));
+        assert!(rig.uc().execute().await.unwrap().is_empty());
+        assert!(rig.ledger.apps().is_empty());
     }
 
     #[tokio::test]
@@ -164,6 +199,7 @@ mod tests {
         let apps = rig.uc().execute().await.unwrap();
         assert_eq!(ids(&apps), ["img", "pkg"]);
         assert_eq!(rig.ledger.apps().len(), 2, "nothing forgotten");
+        assert!(rig.desktop.calls().is_empty(), "entries kept");
     }
 
     #[tokio::test]
