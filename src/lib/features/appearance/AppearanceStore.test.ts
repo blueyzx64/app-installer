@@ -10,6 +10,7 @@ const base: Appearance = {
   accent: null,
   highContrast: false,
   reducedMotion: false,
+  textScale: 1,
   controls: { side: 'right', buttons: ['close'] }
 };
 
@@ -52,7 +53,7 @@ describe('AppearanceStore', () => {
     await store.start();
     f.emit({ ...base, colorScheme: 'dark' });
     expect(root.dataset.scheme).toBe('dark');
-    expect(root.dataset.motion).toBe('full');
+    expect(root.dataset.motion).toBeUndefined();
     expect(root.style.getPropertyValue('--accent')).toBe('');
     expect(store.current?.colorScheme).toBe('dark');
   });
@@ -76,6 +77,25 @@ describe('AppearanceStore', () => {
     };
     await expect(new AppearanceStore(gw, root).start()).resolves.toBeTypeOf('function');
     expect(root.dataset.scheme).toBeUndefined();
+  });
+});
+
+describe('AppearanceStore text scale and motion', () => {
+  // F-55 (R8): --text-scale must reach the document.
+  it('review_r8_text_scale_reaches_the_document', async () => {
+    const root = document.createElement('html');
+    await new AppearanceStore(fake({ ...base, textScale: 1.25 }).gw, root).start();
+    expect(root.style.getPropertyValue('--text-scale')).toBe('1.25');
+  });
+
+  // D-031: reduce sets the attribute, anything else removes it (OS media query wins).
+  it('removes data-motion when reduced motion is off', async () => {
+    const root = document.createElement('html');
+    const f = fake({ ...base, reducedMotion: true });
+    await new AppearanceStore(f.gw, root).start();
+    expect(root.dataset.motion).toBe('reduce');
+    f.emit({ ...base, reducedMotion: false });
+    expect(root.dataset.motion).toBeUndefined();
   });
 });
 

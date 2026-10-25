@@ -17,10 +17,15 @@
   }
 
   let { controls, focused = true, onclose, onminimize }: Props = $props();
+
+  // The window must always be closable (D-032): add close if the layout lacks it.
+  const buttons = $derived(
+    controls.buttons.includes('close') ? controls.buttons : [...controls.buttons, 'close' as const]
+  );
 </script>
 
 <div class="controls" class:unfocused={!focused} data-side={controls.side} role="group">
-  {#each controls.buttons as kind (kind)}
+  {#each buttons as kind (kind)}
     {#if kind === 'close'}
       <button
         type="button"
@@ -48,7 +53,7 @@
 
 <style>
   .controls {
-    --glyph: rgb(0 0 0 / 55%);
+    --glyph: var(--light-glyph);
     display: flex;
     align-items: center;
     gap: var(--sp-2);

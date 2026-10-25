@@ -29,6 +29,7 @@
   --light-min: #febc2e;
   --light-zoom: #28c840;
   --light-inactive: #d1d1d6;
+  --light-glyph: rgb(0 0 0 / 55%);
   --material-thin: rgb(246 246 248 / 78%);
   --material-toast: rgb(246 246 248 / 94%);
   --material-blur: blur(20px) saturate(180%);

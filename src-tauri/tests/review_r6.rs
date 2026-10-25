@@ -127,7 +127,10 @@ fn review_r6_dropzone_rejects_dirs_fifos_devs() {
 fn review_r6_preview_id_rejects_noncanonical_plus_and_leading_zero() {
     use installer_domain::PreviewId;
     for alias in ["p+5", "p05"] {
-        assert!(alias.parse::<PreviewId>().is_err(), "alias accepted: {alias}");
+        assert!(
+            alias.parse::<PreviewId>().is_err(),
+            "alias accepted: {alias}"
+        );
     }
 }
 

@@ -59,6 +59,13 @@ describe('WindowControls', () => {
     expect(onminimize).toHaveBeenCalledOnce();
   });
 
+  it('always renders close, even if the layout lacks it', () => {
+    render(WindowControls, {
+      props: { controls: { side: 'right', buttons: ['minimize', 'maximize'] } }
+    });
+    expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+  });
+
   it('marks unfocused windows', () => {
     const { container } = render(WindowControls, { props: { controls: GNOME, focused: false } });
     expect(container.querySelector('.controls')).toHaveClass('unfocused');
