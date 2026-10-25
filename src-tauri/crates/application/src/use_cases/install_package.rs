@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use installer_domain::{
-    AppId, AppSource, InstallError, InstallOutcome, InstallPhase, InstallProgress, InstallScope,
-    InstalledApp, PreviewId,
+    AppId, AppSource, Compatibility, InstallError, InstallOutcome, InstallPhase, InstallProgress,
+    InstallScope, InstalledApp, PreviewId,
 };
 
 use crate::ports::{
@@ -103,14 +103,24 @@ where
                 self.system.install(file, observer, cancel.clone()).await?;
             }
             InstallScope::User => {
+                // An update overwrites a working copy; never trash it on failure.
+                let is_update = matches!(preview.compat, Compatibility::AlreadyInstalled { .. });
                 observer.on_progress(InstallProgress::phase(InstallPhase::Installing));
+                check_cancel(cancel)?;
                 app.path = Some(self.user.install(file, meta).await?);
-                match self.desktop.install_entry(&app, meta.icon.as_ref()).await {
+                let entry = if cancel.is_cancelled() {
+                    Err(InstallError::Cancelled)
+                } else {
+                    self.desktop.install_entry(&app, meta.icon.as_ref()).await
+                };
+                match entry {
                     Ok(desktop_id) => app.desktop_id = Some(desktop_id),
                     Err(e) => {
-                        // Do not leave a half-installed app behind.
-                        if let Err(cleanup) = self.user.trash(&app).await {
-                            tracing::warn!(error = %cleanup, "cleanup after failed install failed");
+                        if !is_update {
+                            // Do not leave a half-installed app behind.
+                            if let Err(cleanup) = self.user.trash(&app).await {
+                                tracing::warn!(error = %cleanup, "cleanup after failed install failed");
+                            }
                         }
                         return Err(e);
                     }
@@ -140,8 +150,7 @@ mod tests {
     use super::*;
     use crate::testing::*;
     use installer_domain::{
-        BackendError, Compatibility, InstallPlan, PackageFormat, PackagePreview, Version,
-        VersionRelation,
+        BackendError, InstallPlan, PackageFormat, PackagePreview, Version, VersionRelation,
     };
 
     struct Rig {
@@ -450,5 +459,43 @@ mod tests {
         assert_eq!(out, InstallOutcome::Cancelled);
         assert!(rig.registry.get(other.id).is_some(), "other preview kept");
         assert!(rig.user.trashed().is_empty());
+    }
+
+    #[tokio::test]
+    async fn failed_update_keeps_the_old_working_copy() {
+        let rig = Rig::new();
+        rig.desktop.fail_install(InstallError::NotEnoughSpace);
+        let p = rig.preview(
+            PackageFormat::AppImage,
+            Compatibility::AlreadyInstalled {
+                relation: VersionRelation::Newer,
+                installed: Version::new("1.0"),
+            },
+        );
+        let out = rig.uc().execute(p.id, &rig.observer).await;
+        assert_eq!(out, InstallOutcome::Failed(InstallError::NotEnoughSpace));
+        assert!(rig.user.trashed().is_empty(), "old copy must stay");
+    }
+
+    #[tokio::test]
+    async fn user_scope_install_honours_cancel() {
+        let rig = Rig::new();
+        let p = rig.preview(PackageFormat::AppImage, Compatibility::Ok);
+        // Cancel arrives as the Installing phase starts, before the copy.
+        struct CancelOnInstalling<'a>(&'a PreviewRegistry, PreviewId);
+        impl InstallObserver for CancelOnInstalling<'_> {
+            fn on_progress(&self, p: InstallProgress) {
+                if p.phase == InstallPhase::Installing {
+                    self.0.cancel(self.1);
+                }
+            }
+            fn on_plan(&self, _: &InstallPlan) {}
+        }
+        let obs = CancelOnInstalling(&rig.registry, p.id);
+        let out = rig.uc().execute(p.id, &obs).await;
+        assert_eq!(out, InstallOutcome::Cancelled);
+        assert!(rig.ledger.apps().is_empty());
+        assert!(rig.desktop.calls().is_empty());
+        assert!(rig.registry.get(p.id).is_some(), "kept for retry");
     }
 }
