@@ -25,7 +25,11 @@ export type InstallerState =
       preview: PackagePreview;
       phase: InstallPhase;
       percent: number | null;
+      /** Highest percent seen in this phase. Survives an "unknown" (null) report. */
+      peak: number;
       etaSecs: number | null;
+      /** The backend accepts a cancel right now (F-28). */
+      allowCancel: boolean;
       plan?: Plan;
       queued: string[];
     }
@@ -58,6 +62,7 @@ export type InstallerEvent =
       phase: InstallPhase;
       percent: number | null;
       etaSecs: number | null;
+      allowCancel?: boolean;
     }
   | { type: 'FINISHED'; outcome: InstallOutcome }
   | { type: 'RETRY' }
@@ -72,12 +77,20 @@ export function isBusy(s: InstallerState): boolean {
   return s.tag === 'starting' || s.tag === 'awaitingPermission' || s.tag === 'installing';
 }
 
-/** Cancel is offered while waiting for permission or before the final phase. */
+/** Cancel is offered while starting or waiting for permission, then only while the backend allows it. */
 export function canCancel(s: InstallerState): boolean {
   if (s.tag === 'awaitingPermission' || s.tag === 'starting') return true;
-  if (s.tag === 'installing') return s.phase !== 'finishing';
+  if (s.tag === 'installing') return s.allowCancel && s.phase !== 'finishing';
   return false;
 }
+
+const PHASE_RANK: Record<InstallPhase, number> = {
+  preparing: 0,
+  waitingForPermission: 1,
+  downloading: 2,
+  installing: 3,
+  finishing: 4
+};
 
 /** alreadyInstalled.newer (package newer than installed) means Update. */
 export function isUpdate(p: PackagePreview | null | undefined): boolean {
@@ -106,13 +119,15 @@ function enqueue(s: Exclude<InstallerState, { tag: 'idle' }>, path: string): Ins
 function progressed(
   prev: Extract<InstallerState, { tag: 'installing' }> | null,
   e: Extract<InstallerEvent, { type: 'PROGRESS' }>
-): { percent: number | null; etaSecs: number | null } {
+): { percent: number | null; peak: number; etaSecs: number | null } {
   let percent = normalizePercent(e.percent);
-  // Never go backwards within a phase.
-  if (prev && prev.phase === e.phase && prev.percent !== null && percent !== null) {
-    percent = Math.max(prev.percent, percent);
+  let peak = percent ?? 0;
+  // Never go backwards within a phase, even across an "unknown" report.
+  if (prev && prev.phase === e.phase) {
+    peak = Math.max(prev.peak, peak);
+    if (percent !== null) percent = peak;
   }
-  return { percent, etaSecs: e.etaSecs };
+  return { percent, peak, etaSecs: e.etaSecs };
 }
 
 export function installerMachine(state: InstallerState, event: InstallerEvent): InstallerState {
@@ -121,6 +136,11 @@ export function installerMachine(state: InstallerState, event: InstallerEvent): 
     if (state.tag === 'idle') return { tag: 'inspecting', path: event.path, queued: [] };
     // Never replace the preview while a drag/install is in flight.
     if (state.tag === 'dragging' || isBusy(state)) return enqueue(state, event.path);
+    if (state.tag === 'inspecting') {
+      // Keep the file being inspected; a second one waits its turn (never dropped, never doubled).
+      if (event.path === state.path || state.queued.includes(event.path)) return state;
+      return enqueue(state, event.path);
+    }
     return { tag: 'inspecting', path: event.path, queued: state.queued };
   }
 
@@ -190,7 +210,9 @@ export function installerMachine(state: InstallerState, event: InstallerEvent): 
           preview: state.preview,
           phase: event.phase,
           percent: p.percent,
+          peak: p.peak,
           etaSecs: p.etaSecs,
+          allowCancel: event.allowCancel ?? false,
           plan: state.plan,
           queued: state.queued
         };
@@ -204,8 +226,17 @@ export function installerMachine(state: InstallerState, event: InstallerEvent): 
       if (event.type === 'PROGRESS') {
         // Installing never goes back to awaiting permission.
         if (event.phase === 'waitingForPermission') return state;
+        // A late event never moves the phase backwards.
+        if (PHASE_RANK[event.phase] < PHASE_RANK[state.phase]) return state;
         const p = progressed(state, event);
-        return { ...state, phase: event.phase, percent: p.percent, etaSecs: p.etaSecs };
+        return {
+          ...state,
+          phase: event.phase,
+          percent: p.percent,
+          peak: p.peak,
+          etaSecs: p.etaSecs,
+          allowCancel: event.allowCancel ?? false
+        };
       }
       if (event.type === 'FINISHED') return finish(state, event.outcome);
       return state;
