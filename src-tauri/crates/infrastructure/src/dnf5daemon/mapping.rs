@@ -166,6 +166,11 @@ impl ProgressTracker {
         }
     }
 
+    /// Current phase.
+    pub fn phase(&self) -> InstallPhase {
+        self.phase
+    }
+
     /// Force a phase (e.g. `WaitingForPermission` right before the polkit call).
     /// Returns progress only when it changed.
     pub fn enter(&mut self, phase: InstallPhase) -> Option<InstallProgress> {

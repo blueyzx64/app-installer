@@ -105,22 +105,35 @@ impl<B: Dnf5Bus> Dnf5Daemon<B> {
         tokio::pin!(tx);
         let mut cancelled = false;
         // Cancel latch. The daemon checks polkit BEFORE it arms cancel, so a
-        // Goal.cancel sent during the dialog is lost (it replies success=false or
-        // is reset). Keep asking on every signal until it is accepted: the first
-        // signal means authorization is over.
-        let mut cancel_pending = false;
+        // Goal.cancel sent during the dialog is lost (success=false or reset).
+        // After a refusal, retry at most once per phase change (the first signal
+        // means authorization is over) and never once Finishing. The rpm phase
+        // refuses cancel for good, so this is at most a handful of calls.
+        // `Some(phase)` = refused while in `phase`, retry pending.
+        let mut refused_in: Option<InstallPhase> = None;
         let result = loop {
             tokio::select! {
                 r = &mut tx => break r,
                 Some(sig) = rx.recv() => {
                     emit(tracker.on_signal(&sig));
-                    if cancel_pending && matches!(self.bus.cancel(sid).await, Ok(true)) {
-                        cancel_pending = false;
+                    let now = tracker.phase();
+                    if let Some(prev) = refused_in
+                        && prev != now
+                    {
+                        refused_in = if now == InstallPhase::Finishing
+                            || matches!(self.bus.cancel(sid).await, Ok(true))
+                        {
+                            None
+                        } else {
+                            Some(now)
+                        };
                     }
                 }
                 () = cancel.cancelled(), if !cancelled => {
                     cancelled = true;
-                    cancel_pending = !matches!(self.bus.cancel(sid).await, Ok(true));
+                    if !matches!(self.bus.cancel(sid).await, Ok(true)) {
+                        refused_in = Some(tracker.phase());
+                    }
                 }
             }
         };
