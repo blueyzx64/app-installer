@@ -3,6 +3,9 @@
 //! Planned: `rpm.rs`, `deb.rs`, `appimage.rs`, `elf.rs`, and a router that
 //! implements `PackageInspector` by dispatching on `PackageFormat`.
 
+pub mod appimage; // lane S3
+pub mod elf; // lane S3
+
 #[cfg(test)]
 mod tests {
     use std::fs;
