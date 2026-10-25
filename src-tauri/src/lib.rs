@@ -1,0 +1,40 @@
+//! Tauri shell: interface adapters and composition root (ARCHITECTURE §8).
+
+pub mod bindings;
+pub mod cli;
+pub mod commands;
+pub mod composition;
+pub mod dto;
+pub mod error;
+pub mod events;
+pub mod state;
+
+use tauri::Manager;
+
+pub fn run() {
+    let launch_file = cli::file_from_argv(&std::env::args().collect::<Vec<_>>());
+    let specta = bindings::builder();
+
+    tauri::Builder::default()
+        // Must be registered first (single-instance requirement).
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            if let Some(path) = cli::file_from_argv(&argv) {
+                events::emit_open_file(app, &path.to_string_lossy());
+            }
+            if let Some(window) = app.get_webview_window("main") {
+                if let Err(err) = window.set_focus() {
+                    log::debug!("could not focus main window: {err}");
+                }
+            }
+        }))
+        .plugin(tauri_plugin_log::Builder::new().build())
+        .manage(composition::build_state(launch_file))
+        .invoke_handler(specta.invoke_handler())
+        .setup(move |app| {
+            specta.mount_events(app);
+            Ok(())
+        })
+        .run(tauri::generate_context!())
+        // Startup failure is unrecoverable; Tauri documents this as the entry-point idiom.
+        .expect("error while running tauri application");
+}
