@@ -1,25 +1,34 @@
 //! `install`, `cancel_install`.
 
+use tauri::State;
 use tauri::ipc::Channel;
 
-use crate::dto::{InstallEventDto, InstallOutcomeDto, InstallPhaseDto};
+use crate::dto::{InstallEvent, InstallOutcome};
 use crate::error::CommandError;
 use crate::events::ChannelObserver;
+use crate::state::AppState;
 
-/// SPIKE STUB (ADR-0009): proves a `Channel` argument survives code generation.
-/// Replaced by the real use case call when the application crate lands.
+/// Streams progress over `on_event`; resolves when finished.
+/// Failures and cancels are outcomes, not errors.
 #[tauri::command]
 #[specta::specta]
 pub async fn install(
+    state: State<'_, AppState>,
     preview_id: String,
-    on_event: Channel<InstallEventDto>,
-) -> Result<InstallOutcomeDto, CommandError> {
+    on_event: Channel<InstallEvent>,
+) -> Result<InstallOutcome, CommandError> {
+    let id = preview_id.parse()?;
     let observer = ChannelObserver::new(on_event);
-    log::debug!("install stub for preview {preview_id}");
-    observer.send(InstallEventDto::Progress {
-        phase: InstallPhaseDto::Preparing,
-        percent: None,
-        eta_secs: None,
-    });
-    Ok(InstallOutcomeDto::Cancelled)
+    Ok(state.install_package.execute(id, &observer).await.into())
+}
+
+/// Best effort. A preview that is not installing is ignored.
+#[tauri::command]
+#[specta::specta]
+pub async fn cancel_install(
+    state: State<'_, AppState>,
+    preview_id: String,
+) -> Result<(), CommandError> {
+    state.cancel_install.execute(preview_id.parse()?);
+    Ok(())
 }

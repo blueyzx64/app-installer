@@ -20,3 +20,7 @@ Rust and TS can't drift apart silently. Every DTO derives `specta::Type`.
   - `u64`/`i64`/`usize` are refused by `specta-typescript` (precision). For byte counts use `#[specta(type = specta_typescript::Number)]` on the field (safe below 2^53; packages are capped at 8 GiB), or a smaller integer type.
   - Types used with serde in both directions are emitted as `X`, `X_Serialize` and `X_Deserialize`. Commands return the `_Serialize` shape (`detail: string | null`). A `Channel<T>` argument is typed with the `_Deserialize` shape (`percent?: number | null`), which is slightly looser than what Rust sends; gateways should treat such optional fields as `undefined | null`.
   - The generated command wrappers return `{ status, data | error }` (a `typedError` helper); gateways unwrap that.
+
+### Update (W0b)
+
+The builder now uses `.disable_serde_phases()` (one TS type per Rust type; no `_Serialize` / `_Deserialize` pairs, so the `Channel<T>` looseness above is gone) and `.error_handling(ErrorHandlingMode::Throw)` (command wrappers are plain `Promise<T>` and reject with `CommandError`). Void commands are typed `Promise<null>`.

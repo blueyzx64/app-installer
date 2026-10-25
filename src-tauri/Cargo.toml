@@ -37,3 +37,6 @@ serde_json = "1"
 thiserror = "2"
 log = "0.4"
 anyhow = "1"
+base64 = "0.22"
+installer-domain = { path = "crates/domain" }
+installer-application = { path = "crates/application", features = ["testing"] }
