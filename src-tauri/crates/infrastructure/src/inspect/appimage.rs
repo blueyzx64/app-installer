@@ -143,20 +143,8 @@ pub fn inspect_path(path: &Path) -> Result<PackageMetadata, InspectError> {
 /// slug drops, so different apps could share one id) gets a short hash of the full name
 /// appended, e.g. `app-3fa9c1d2`.
 pub fn machine_name(display_name: &str) -> String {
-    let slug = AppId::from_name(display_name);
-    if !display_name
-        .chars()
-        .any(|c| c.is_alphanumeric() && !c.is_ascii())
-    {
-        return slug.as_str().to_owned();
-    }
-    let mut hash: u32 = 0x811c_9dc5; // FNV-1a
-    for b in display_name.bytes() {
-        hash ^= u32::from(b);
-        hash = hash.wrapping_mul(0x0100_0193);
-    }
-    let base: String = slug.as_str().chars().take(55).collect();
-    format!("{}-{hash:08x}", base.trim_end_matches('-'))
+    // `AppId::from_name` already keeps non-ASCII names apart with a stable hash suffix (D-034).
+    AppId::from_name(display_name).as_str().to_owned()
 }
 
 fn name_from_file(stem: &str) -> String {

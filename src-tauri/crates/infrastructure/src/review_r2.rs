@@ -147,6 +147,7 @@ async fn review_r2_unreadable_store_makes_reconcile_forget_everything() {
         store,
         ledger.clone(),
         Arc::new(FakeSystemPackages::default()),
+        Arc::new(FakeDesktop::default()),
     );
     let apps = uc.execute().await.unwrap();
     assert_eq!(apps.len(), 1, "app dropped on scan I/O error");
@@ -222,7 +223,12 @@ async fn review_r2_reconcile_refreshes_version_from_disk() {
     let ledger = Arc::new(FakeLedger::default());
     ledger.seed(sample_app("lumen", "1.0", AppSource::AppImage));
     user.set_scan(vec![sample_app("lumen", "2.0", AppSource::AppImage)]);
-    let uc = ListInstalledApps::new(user, ledger, Arc::new(FakeSystemPackages::default()));
+    let uc = ListInstalledApps::new(
+        user,
+        ledger,
+        Arc::new(FakeSystemPackages::default()),
+        Arc::new(FakeDesktop::default()),
+    );
     let apps = uc.execute().await.unwrap();
     assert_eq!(apps[0].version.as_str(), "2.0");
 }
