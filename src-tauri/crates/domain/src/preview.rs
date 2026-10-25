@@ -33,7 +33,13 @@ impl FromStr for PreviewId {
     type Err = InvalidPreviewId;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // Canonical form only: digits, no sign, no leading zero (`p5`, not `p+5` or `p05`).
         s.strip_prefix('p')
+            .filter(|n| {
+                !n.is_empty()
+                    && n.bytes().all(|b| b.is_ascii_digit())
+                    && (n.len() == 1 || !n.starts_with('0'))
+            })
             .and_then(|n| n.parse().ok())
             .map(PreviewId)
             .ok_or_else(|| InvalidPreviewId(s.to_owned()))
@@ -80,6 +86,16 @@ mod tests {
     fn bad_ids_rejected() {
         for bad in ["", "42", "p", "px", "p-1", "P1", "p1 "] {
             assert!(bad.parse::<PreviewId>().is_err(), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn parse_rejects_non_canonical_forms() {
+        for bad in ["p+5", "p05", "p00", "p-1", "p", "5", "P5", "p 5", "p5 "] {
+            assert!(bad.parse::<PreviewId>().is_err(), "{bad:?}");
+        }
+        for (good, n) in [("p0", 0), ("p5", 5), ("p120", 120)] {
+            assert_eq!(good.parse::<PreviewId>().unwrap(), PreviewId::new(n));
         }
     }
 }

@@ -75,6 +75,7 @@ pub fn merge(raw: &RawSettings) -> Appearance {
             .button_layout
             .as_deref()
             .map_or(d.controls, button_layout::parse),
+        text_scale: d.text_scale, // lane S7 reads the real value
     }
 }
 

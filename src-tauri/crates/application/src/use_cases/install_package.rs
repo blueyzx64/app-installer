@@ -54,14 +54,16 @@ where
     /// On success the preview is dropped; otherwise it stays so the person can retry.
     #[tracing::instrument(skip_all, fields(preview = %id))]
     pub async fn execute(&self, id: PreviewId, observer: &dyn InstallObserver) -> InstallOutcome {
-        let (stored, cancel) = match self.registry.begin(id) {
-            Ok(x) => x,
+        // The guard frees the slot on every exit, including a panic.
+        let mut slot = match self.registry.begin_guarded(id) {
+            Ok(slot) => slot,
             Err(e) => return InstallOutcome::from_error(e),
         };
-        let result = self.run(&stored, observer, &cancel).await;
-        self.registry.finish(id, result.is_err());
-        match result {
-            Ok(app) => InstallOutcome::Installed(app),
+        match self.run(slot.stored(), observer, slot.token()).await {
+            Ok(app) => {
+                slot.discard_preview();
+                InstallOutcome::Installed(app)
+            }
             Err(e) => InstallOutcome::from_error(e),
         }
     }

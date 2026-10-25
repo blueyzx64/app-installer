@@ -27,6 +27,8 @@ struct Entry {
 struct Inner {
     next: u64,
     entries: HashMap<PreviewId, Entry>,
+    /// An uninstall is running (shares the one-at-a-time rule with installs).
+    uninstalling: bool,
 }
 
 #[derive(Debug, Default)]
@@ -94,13 +96,37 @@ impl PreviewRegistry {
             return Err(InstallError::NotFound);
         }
         // F-02: one install at a time, across all previews.
-        if g.entries.values().any(|e| e.active.is_some()) {
+        if g.uninstalling || g.entries.values().any(|e| e.active.is_some()) {
             return Err(InstallError::Busy);
         }
         let entry = g.entries.get_mut(&id).ok_or(InstallError::NotFound)?;
         let token = CancelToken::new();
         entry.active = Some(token.clone());
         Ok((entry.stored.clone(), token))
+    }
+
+    /// Like [`begin`](Self::begin), but the slot is released when the guard is
+    /// dropped, even on an early return or a panic (the preview is kept for retry).
+    pub fn begin_guarded(&self, id: PreviewId) -> Result<InstallSlot<'_>, InstallError> {
+        let (stored, token) = self.begin(id)?;
+        Ok(InstallSlot {
+            registry: self,
+            id,
+            stored,
+            token,
+            keep: true,
+        })
+    }
+
+    /// Take the one-at-a-time slot for an uninstall. `Busy` while any install
+    /// or uninstall runs. Released when the guard drops.
+    pub fn begin_uninstall(&self) -> Result<UninstallSlot<'_>, InstallError> {
+        let mut g = self.lock();
+        if g.uninstalling || g.entries.values().any(|e| e.active.is_some()) {
+            return Err(InstallError::Busy);
+        }
+        g.uninstalling = true;
+        Ok(UninstallSlot { registry: self })
     }
 
     /// End an install. Keeps the preview for a retry unless `keep` is false.
@@ -132,6 +158,49 @@ impl PreviewRegistry {
 
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+}
+
+/// Holds the install slot of one preview. Dropping it frees the slot.
+#[derive(Debug)]
+pub struct InstallSlot<'a> {
+    registry: &'a PreviewRegistry,
+    id: PreviewId,
+    stored: StoredPreview,
+    token: CancelToken,
+    keep: bool,
+}
+
+impl InstallSlot<'_> {
+    pub fn stored(&self) -> &StoredPreview {
+        &self.stored
+    }
+
+    pub fn token(&self) -> &CancelToken {
+        &self.token
+    }
+
+    /// Drop the preview too when the guard ends (install succeeded).
+    pub fn discard_preview(&mut self) {
+        self.keep = false;
+    }
+}
+
+impl Drop for InstallSlot<'_> {
+    fn drop(&mut self) {
+        self.registry.finish(self.id, self.keep);
+    }
+}
+
+/// Holds the uninstall slot. Dropping it frees the slot.
+#[derive(Debug)]
+pub struct UninstallSlot<'a> {
+    registry: &'a PreviewRegistry,
+}
+
+impl Drop for UninstallSlot<'_> {
+    fn drop(&mut self) {
+        self.registry.lock().uninstalling = false;
     }
 }
 
@@ -200,5 +269,47 @@ mod tests {
         }
         assert!(reg.get(first).is_some(), "active entry never evicted");
         assert_eq!(reg.len(), MAX_IDLE + 1);
+    }
+
+    #[test]
+    fn guard_frees_the_slot_on_drop_and_on_panic() {
+        let reg = PreviewRegistry::new();
+        let (a, b) = (add(&reg), add(&reg));
+        {
+            let slot = reg.begin_guarded(a).unwrap();
+            assert_eq!(slot.stored().preview.id, a);
+            assert_eq!(reg.begin(b).unwrap_err(), InstallError::Busy);
+        }
+        assert!(reg.get(a).is_some(), "kept for retry");
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _slot = reg.begin_guarded(a).unwrap();
+            panic!("boom");
+        }));
+        assert!(r.is_err());
+        assert!(reg.begin_guarded(b).is_ok(), "slot released after panic");
+    }
+
+    #[test]
+    fn discarded_preview_is_removed_when_guard_ends() {
+        let reg = PreviewRegistry::new();
+        let a = add(&reg);
+        let mut slot = reg.begin_guarded(a).unwrap();
+        slot.discard_preview();
+        drop(slot);
+        assert!(reg.get(a).is_none());
+    }
+
+    #[test]
+    fn uninstall_shares_the_busy_guard() {
+        let reg = PreviewRegistry::new();
+        let a = add(&reg);
+        let un = reg.begin_uninstall().unwrap();
+        assert_eq!(reg.begin(a).unwrap_err(), InstallError::Busy);
+        assert_eq!(reg.begin_uninstall().unwrap_err(), InstallError::Busy);
+        drop(un);
+        let slot = reg.begin_guarded(a).unwrap();
+        assert_eq!(reg.begin_uninstall().unwrap_err(), InstallError::Busy);
+        drop(slot);
+        assert!(reg.begin_uninstall().is_ok());
     }
 }
