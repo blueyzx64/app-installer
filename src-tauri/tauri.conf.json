@@ -29,8 +29,53 @@
     }
   },
   "bundle": {
-    "active": false,
-    "targets": "all",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.png"]
+    "active": true,
+    "targets": [
+      "rpm",
+      "appimage"
+    ],
+    "category": "Utility",
+    "shortDescription": "Install apps by dragging them to Applications",
+    "longDescription": "Open an app package, drag it to Applications, done. Works with RPM packages and AppImage files.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png"
+    ],
+    "fileAssociations": [
+      {
+        "ext": [
+          "rpm"
+        ],
+        "mimeType": "application/x-rpm",
+        "name": "App package"
+      },
+      {
+        "ext": [
+          "AppImage",
+          "appimage"
+        ],
+        "mimeType": "application/vnd.appimage",
+        "name": "App"
+      }
+    ],
+    "linux": {
+      "rpm": {
+        "depends": [
+          "PackageKit",
+          "webkit2gtk4.1"
+        ],
+        "desktopTemplate": "linux/installer.desktop",
+        "files": {
+          "/usr/share/metainfo/io.github.blueyzx64.Installer.metainfo.xml": "linux/io.github.blueyzx64.Installer.metainfo.xml"
+        }
+      },
+      "appimage": {
+        "files": {
+          "/usr/share/metainfo/io.github.blueyzx64.Installer.metainfo.xml": "linux/io.github.blueyzx64.Installer.metainfo.xml"
+        }
+      }
+    }
   }
 }
