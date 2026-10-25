@@ -18,9 +18,14 @@
 
   let { controls, focused = true, onclose, onminimize }: Props = $props();
 
-  // The window must always be closable (D-032): add close if the layout lacks it.
+  // The window must always be closable (D-032): add close if the layout lacks it,
+  // first on the left and last on the right, matching the Rust parser.
   const buttons = $derived(
-    controls.buttons.includes('close') ? controls.buttons : [...controls.buttons, 'close' as const]
+    controls.buttons.includes('close')
+      ? controls.buttons
+      : controls.side === 'left'
+        ? ['close' as const, ...controls.buttons]
+        : [...controls.buttons, 'close' as const]
   );
 </script>
 
