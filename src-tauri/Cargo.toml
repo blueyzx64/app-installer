@@ -33,6 +33,13 @@ path = "src/main.rs"
 [[bin]]
 name = "export-bindings"
 path = "src/bin/export-bindings.rs"
+# Dev tool only: kept out of the RPM bundle (`pnpm bindings` enables the feature).
+required-features = ["export-bindings"]
+
+[features]
+default = ["dnf5daemon"]
+dnf5daemon = ["installer-infrastructure/dnf5daemon"]
+export-bindings = []
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -52,8 +59,10 @@ tracing-appender = "0.2" # lane S11
 anyhow = "1"
 base64 = "0.22"
 installer-domain = { path = "crates/domain" }
-installer-application = { path = "crates/application", features = ["testing"] }
+installer-application = { path = "crates/application" }
+installer-infrastructure = { path = "crates/infrastructure" }
 tauri-plugin-dialog = "2"
 
 [dev-dependencies]
+installer-application = { path = "crates/application", features = ["testing"] }
 tokio = { version = "1", features = ["rt", "macros"] }

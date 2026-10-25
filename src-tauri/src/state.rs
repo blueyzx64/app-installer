@@ -5,7 +5,8 @@ use std::sync::Mutex;
 
 use crate::composition::{
     CancelInstallUc, DefaultStatusUc, DismissPromptUc, GetAppearanceUc, InstallPackageUc,
-    LaunchAppUc, ListInstalledUc, MakeDefaultUc, OpenPackageUc, UninstallAppUc, WatchAppearanceUc,
+    LaunchAppUc, ListInstalledUc, MakeDefaultUc, OpenPackageUc, UninstallAppUc, UninstallPlanUc,
+    WatchAppearanceUc,
 };
 
 pub struct AppState {
@@ -15,6 +16,7 @@ pub struct AppState {
     pub cancel_install: CancelInstallUc,
     pub list_installed: ListInstalledUc,
     pub uninstall_app: UninstallAppUc,
+    pub uninstall_plan: UninstallPlanUc,
     pub launch_app: LaunchAppUc,
     pub default_status: DefaultStatusUc,
     pub make_default: MakeDefaultUc,

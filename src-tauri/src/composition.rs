@@ -1,9 +1,8 @@
 //! Composition root: the only place that names concrete adapter types.
 //!
-//! Until a real adapter exists for a port, the application crate's `testing`
-//! fakes stand in behind clearly named `fake_*` functions (D-012). A real
-//! adapter replaces its `fake_*` function and the matching type alias, nothing
-//! else.
+//! Every port is wired to its real adapter. The application crate's `testing`
+//! fakes are used only in tests (dev-dependency). A shell-side swap is one
+//! `type` alias plus one constructor line.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -11,36 +10,48 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use installer_application::PreviewRegistry;
 use installer_application::ports::Clock;
-use installer_application::testing::{
-    FakeAppearance, FakeDefaults, FakeDesktop, FakeFileProbe, FakeHost, FakeInspector,
-    FakeLauncher, FakeLedger, FakeUserApps,
-};
 use installer_application::use_cases::{
     CancelInstall, DismissDefaultPrompt, GetAppearance, GetDefaultHandlerStatus, InstallPackage,
-    LaunchApp, ListInstalledApps, MakeDefaultHandler, OpenPackage, UninstallApp, WatchAppearance,
+    LaunchApp, ListInstalledApps, MakeDefaultHandler, OpenPackage, UninstallApp, UninstallPlan,
+    WatchAppearance,
 };
+use installer_infrastructure::appearance::GnomeAppearanceSource;
+use installer_infrastructure::appimage_store::AppImageStore;
+use installer_infrastructure::defaults::GioDefaultHandlerRegistry;
+use installer_infrastructure::desktop_entries::{DesktopEntries, default_data_home};
+use installer_infrastructure::file_probe::FsFileProbe;
+use installer_infrastructure::host::OsReleaseProbe;
+use installer_infrastructure::inspect::appimage::AppImageInspector;
+use installer_infrastructure::inspect::deb::DebInspector;
+use installer_infrastructure::inspect::rpm::RpmInspector;
+use installer_infrastructure::launcher::GioLauncher;
+use installer_infrastructure::ledger::JsonLedger;
 
-use crate::fallbacks::{InspectorChain, NoInspector, UnavailableSystemPackages};
+use crate::fallbacks::{AnySystemPackages, InspectorChain, NoInspector};
 use crate::state::{AppState, LaunchFile};
 
-// Port implementations in use. Swap these when a real adapter lands.
-type Probe = FakeFileProbe;
-// One inspector per format, chained. W1: AppImage (S3). W2: add rpm and deb.
-type Inspector = InspectorChain<FakeInspector, NoInspector>;
-type Host = FakeHost;
-// D-020: unavailable stub until PackageKit lands in W2.
-type System = UnavailableSystemPackages;
-type User = FakeUserApps;
-type Desktop = FakeDesktop;
-type Ledger = FakeLedger;
-type Launch = FakeLauncher;
-type Defaults = FakeDefaults;
-type Appearance = FakeAppearance;
+// Port implementations in use. Swap these when an adapter changes.
+type Probe = FsFileProbe;
+// One inspector per format, chained: AppImage, then RPM, then DEB.
+type Inspector = InspectorChain<
+    AppImageInspector,
+    InspectorChain<RpmInspector, InspectorChain<DebInspector, NoInspector>>,
+>;
+type Host = OsReleaseProbe;
+// PackageKit, else dnf5daemon, else unavailable (D-020). Chosen at startup.
+type System = AnySystemPackages;
+type User = AppImageStore;
+type Desktop = DesktopEntries;
+type Ledger = JsonLedger;
+type Launch = GioLauncher;
+type Defaults = GioDefaultHandlerRegistry;
+type Appearance = GnomeAppearanceSource;
 
 pub type OpenPackageUc = OpenPackage<Probe, Inspector, Host, System, Ledger>;
 pub type InstallPackageUc = InstallPackage<System, User, Desktop, Ledger, SystemClock>;
 pub type ListInstalledUc = ListInstalledApps<User, Ledger, System>;
 pub type UninstallAppUc = UninstallApp<System, User, Desktop, Ledger>;
+pub type UninstallPlanUc = UninstallPlan<System, Ledger>;
 pub type LaunchAppUc = LaunchApp<Ledger, Launch>;
 pub type DefaultStatusUc = GetDefaultHandlerStatus<Defaults>;
 pub type MakeDefaultUc = MakeDefaultHandler<Defaults>;
@@ -63,51 +74,46 @@ impl Clock for SystemClock {
     }
 }
 
-// ---- fakes standing in for adapters that do not exist yet (D-012) ----
-
-fn fake_probe() -> Arc<Probe> {
-    Arc::new(FakeFileProbe::default())
-}
-fn fake_inspector() -> Arc<Inspector> {
-    Arc::new(InspectorChain::new(FakeInspector::default(), NoInspector))
-}
-fn fake_host() -> Arc<Host> {
-    Arc::new(FakeHost::fedora())
-}
-fn fake_system_packages() -> Arc<System> {
-    Arc::new(UnavailableSystemPackages)
-}
-fn fake_user_apps() -> Arc<User> {
-    Arc::new(FakeUserApps::default())
-}
-fn fake_desktop() -> Arc<Desktop> {
-    Arc::new(FakeDesktop::default())
-}
-fn fake_ledger() -> Arc<Ledger> {
-    Arc::new(FakeLedger::default())
-}
-fn fake_launcher() -> Arc<Launch> {
-    Arc::new(FakeLauncher::default())
-}
-fn fake_defaults() -> Arc<Defaults> {
-    Arc::new(FakeDefaults::default())
-}
-fn fake_appearance() -> Arc<Appearance> {
-    Arc::new(FakeAppearance::default())
+fn inspector() -> Inspector {
+    InspectorChain::new(
+        AppImageInspector,
+        InspectorChain::new(
+            RpmInspector::new(),
+            InspectorChain::new(DebInspector::new(), NoInspector),
+        ),
+    )
 }
 
-/// Wire every use case. Real adapters replace the `fake_*` calls one by one.
+/// `$XDG_DATA_HOME`, else `~/.local/share`. Without a home the temp dir keeps
+/// the app running (nothing survives a reboot, which is the honest outcome).
+fn data_home() -> PathBuf {
+    default_data_home().unwrap_or_else(|| {
+        log::warn!("no home directory; using the temp directory");
+        std::env::temp_dir()
+    })
+}
+
+fn app_store() -> AppImageStore {
+    AppImageStore::from_env().unwrap_or_else(|| AppImageStore::new(std::env::temp_dir()))
+}
+
+/// Wire every use case to its real adapter.
 pub fn build_state(launch_file: Option<PathBuf>) -> AppState {
-    let probe = fake_probe();
-    let inspector = fake_inspector();
-    let host = fake_host();
-    let system = fake_system_packages();
-    let user = fake_user_apps();
-    let desktop = fake_desktop();
-    let ledger = fake_ledger();
-    let launcher = fake_launcher();
-    let defaults = fake_defaults();
-    let appearance = fake_appearance();
+    let data_home = data_home();
+    let probe = Arc::new(FsFileProbe);
+    let inspector = Arc::new(inspector());
+    let host = Arc::new(OsReleaseProbe::new());
+    // One short bus probe at startup; before the event loop, so block here.
+    let system = Arc::new(tauri::async_runtime::block_on(AnySystemPackages::detect()));
+    let user = Arc::new(app_store());
+    let desktop = Arc::new(DesktopEntries::new(&data_home));
+    let ledger = Arc::new(JsonLedger::new(&data_home));
+    let launcher = Arc::new(GioLauncher::with_applications_dir(
+        data_home.join("applications"),
+    ));
+    let defaults = Arc::new(GioDefaultHandlerRegistry::new());
+    // The use cases hold this Arc, so the watcher lives as long as `AppState`.
+    let appearance = Arc::new(GnomeAppearanceSource::new());
     let clock = Arc::new(SystemClock);
     let registry = Arc::new(PreviewRegistry::new());
 
@@ -131,6 +137,7 @@ pub fn build_state(launch_file: Option<PathBuf>) -> AppState {
         ),
         cancel_install: CancelInstall::new(registry),
         list_installed: ListInstalledApps::new(user.clone(), ledger.clone(), system.clone()),
+        uninstall_plan: UninstallPlan::new(system.clone(), ledger.clone()),
         uninstall_app: UninstallApp::new(system, user, desktop, ledger.clone()),
         launch_app: LaunchApp::new(ledger, launcher),
         default_status: GetDefaultHandlerStatus::new(defaults.clone()),

@@ -1999,6 +1999,7 @@ dependencies = [
  "base64 0.22.1",
  "installer-application",
  "installer-domain",
+ "installer-infrastructure",
  "log",
  "serde",
  "serde_json",

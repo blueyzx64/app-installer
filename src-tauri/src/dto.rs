@@ -258,6 +258,8 @@ pub enum InstallEvent {
         phase: InstallPhase,
         percent: Option<u8>,
         eta_secs: Option<u32>,
+        /// True only while the backend accepts a cancel (F-28).
+        allow_cancel: bool,
     },
 }
 
@@ -276,6 +278,24 @@ impl From<domain::InstallProgress> for InstallEvent {
             phase: p.phase.into(),
             percent: p.percent,
             eta_secs: p.eta_secs,
+            allow_cancel: p.allow_cancel,
+        }
+    }
+}
+
+/// What removing an app would do (F-42).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct UninstallPlan {
+    pub also_removes: u32,
+    pub needs_permission: bool,
+}
+
+impl From<domain::UninstallPlan> for UninstallPlan {
+    fn from(p: domain::UninstallPlan) -> Self {
+        Self {
+            also_removes: p.also_removes,
+            needs_permission: p.needs_permission,
         }
     }
 }
@@ -585,9 +605,17 @@ mod tests {
             j(&InstallEvent::Progress {
                 phase: InstallPhase::WaitingForPermission,
                 percent: None,
-                eta_secs: Some(3)
+                eta_secs: Some(3),
+                allow_cancel: true
             }),
-            json!({"kind": "progress", "phase": "waitingForPermission", "percent": null, "etaSecs": 3})
+            json!({"kind": "progress", "phase": "waitingForPermission", "percent": null, "etaSecs": 3, "allowCancel": true})
+        );
+        assert_eq!(
+            j(&UninstallPlan {
+                also_removes: 2,
+                needs_permission: true
+            }),
+            json!({"alsoRemoves": 2, "needsPermission": true})
         );
     }
 

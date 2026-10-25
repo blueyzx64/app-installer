@@ -7,6 +7,9 @@ use installer_domain::{
     BackendError, InspectError, InstallError, InstallPlan, PackageFile, PackageFormat,
     PackageMetadata, UnsupportedReason, Version,
 };
+#[cfg(feature = "dnf5daemon")]
+use installer_infrastructure::dnf5daemon::{Dnf5Daemon, ZbusBus};
+use installer_infrastructure::packagekit::PackageKitSystemPackages;
 
 /// System packages until the PackageKit backend lands (W2, D-020).
 /// Nothing is installed, and installing says the backend is unavailable.
@@ -41,6 +44,84 @@ impl SystemPackages for UnavailableSystemPackages {
 
     async fn removal_plan(&self, _name: &str) -> Result<u32, BackendError> {
         Err(BackendError::Unavailable("system backend".into()))
+    }
+}
+
+/// The system backend chosen at startup: PackageKit, else dnf5daemon, else nothing.
+pub enum AnySystemPackages {
+    PackageKit(PackageKitSystemPackages),
+    #[cfg(feature = "dnf5daemon")]
+    Dnf5(Dnf5Daemon<ZbusBus>),
+    Unavailable(UnavailableSystemPackages),
+}
+
+impl AnySystemPackages {
+    /// Probe the system bus once. Never starts a service.
+    pub async fn detect() -> Self {
+        let pk = PackageKitSystemPackages::new();
+        if pk.is_available().await {
+            return Self::PackageKit(pk);
+        }
+        #[cfg(feature = "dnf5daemon")]
+        if installer_infrastructure::dnf5daemon::is_available().await {
+            match Dnf5Daemon::connect().await {
+                Ok(d) => return Self::Dnf5(d),
+                Err(e) => log::warn!("dnf5daemon found but not usable: {e}"),
+            }
+        }
+        Self::Unavailable(UnavailableSystemPackages)
+    }
+}
+
+impl SystemPackages for AnySystemPackages {
+    async fn installed_version(&self, name: &str) -> Result<Option<Version>, BackendError> {
+        match self {
+            Self::PackageKit(s) => s.installed_version(name).await,
+            #[cfg(feature = "dnf5daemon")]
+            Self::Dnf5(s) => s.installed_version(name).await,
+            Self::Unavailable(s) => s.installed_version(name).await,
+        }
+    }
+
+    async fn plan(&self, file: &PackageFile) -> Result<InstallPlan, BackendError> {
+        match self {
+            Self::PackageKit(s) => s.plan(file).await,
+            #[cfg(feature = "dnf5daemon")]
+            Self::Dnf5(s) => s.plan(file).await,
+            Self::Unavailable(s) => s.plan(file).await,
+        }
+    }
+
+    async fn install(
+        &self,
+        file: &PackageFile,
+        observer: &dyn InstallObserver,
+        cancel: CancelToken,
+    ) -> Result<(), InstallError> {
+        match self {
+            Self::PackageKit(s) => s.install(file, observer, cancel).await,
+            #[cfg(feature = "dnf5daemon")]
+            Self::Dnf5(s) => s.install(file, observer, cancel).await,
+            Self::Unavailable(s) => s.install(file, observer, cancel).await,
+        }
+    }
+
+    async fn remove(&self, name: &str, observer: &dyn InstallObserver) -> Result<(), InstallError> {
+        match self {
+            Self::PackageKit(s) => s.remove(name, observer).await,
+            #[cfg(feature = "dnf5daemon")]
+            Self::Dnf5(s) => s.remove(name, observer).await,
+            Self::Unavailable(s) => s.remove(name, observer).await,
+        }
+    }
+
+    async fn removal_plan(&self, name: &str) -> Result<u32, BackendError> {
+        match self {
+            Self::PackageKit(s) => s.removal_plan(name).await,
+            #[cfg(feature = "dnf5daemon")]
+            Self::Dnf5(s) => s.removal_plan(name).await,
+            Self::Unavailable(s) => s.removal_plan(name).await,
+        }
     }
 }
 
