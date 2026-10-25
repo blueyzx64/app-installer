@@ -19,3 +19,11 @@ src-tauri/gen/
 .vscode/*
 !.vscode/extensions.json
 *.log
+
+# Misc
+node_modules
+.svelte-kit
+build
+src-tauri/target
+src-tauri/gen
+vite.config.ts.timestamp-*
