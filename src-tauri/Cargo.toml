@@ -52,3 +52,4 @@ anyhow = "1"
 base64 = "0.22"
 installer-domain = { path = "crates/domain" }
 installer-application = { path = "crates/application", features = ["testing"] }
+tauri-plugin-dialog = "2"

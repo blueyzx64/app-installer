@@ -41,10 +41,14 @@ export interface WindowGateway {
   startDragging(): Promise<void>;
 }
 
+import type { FilesGateway } from './files-gateway'; // lane S4b
+export type { FilesGateway } from './files-gateway'; // lane S4b
+
 export interface Gateways {
   installer: InstallerGateway;
   library: LibraryGateway;
   defaults: DefaultsGateway;
   appearance: AppearanceGateway;
   window: WindowGateway;
+  files: FilesGateway; // lane S4b
 }

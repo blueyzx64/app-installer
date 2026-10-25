@@ -4,6 +4,7 @@ pub mod bindings;
 pub mod cli;
 pub mod commands;
 pub mod composition;
+pub mod dropzone; // lane S4b
 pub mod dto;
 pub mod error;
 pub mod events;
@@ -28,6 +29,8 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_log::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init()) // lane S4b
+        .on_window_event(dropzone::on_window_event) // lane S4b
         .manage(composition::build_state(launch_file))
         .invoke_handler(specta.invoke_handler())
         .setup(move |app| {

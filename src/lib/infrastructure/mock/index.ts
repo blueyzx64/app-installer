@@ -25,6 +25,7 @@ import {
   lumenPreview,
   seedLibrary
 } from './fixtures';
+import { createMockFilesGateway } from './files-gateway'; // lane S4b
 import { installScript, uninstallScript, type ScriptStep } from './install-script';
 import {
   DEFAULT_SCENARIO,
@@ -243,6 +244,7 @@ export function createMockGateways(options: MockOptions = {}): MockGateways {
     defaults,
     appearance: appearanceGw,
     window: windowGw,
+    files: createMockFilesGateway({ format: formatForScenario(scenario) }), // lane S4b
     controls: {
       scenario,
       emitOpenFile: (path) => openFileCbs.forEach((cb) => cb(path)),
