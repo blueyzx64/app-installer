@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Package Installer</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#0B6BD6}a:hover{color:#08529F}
+@keyframes winOpen{from{opacity:0;transform:scale(.86)}to{opacity:1;transform:scale(1)}}
+@keyframes sheetDown{from{transform:translate(-50%,-110%)}to{transform:translate(-50%,0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes authIn{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:scale(1)}}
+@keyframes toastIn{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:none}}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes pop{0%{transform:scale(.4);opacity:0}60%{transform:scale(1.12);opacity:1}100%{transform:scale(1);opacity:1}}
+@keyframes folderGulp{0%{transform:scale(1)}45%{transform:scale(1.14)}100%{transform:scale(1)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes dash{to{stroke-dashoffset:-24}}
+@keyframes shakeA{0%,100%{transform:translateX(0)}20%{transform:translateX(-10px)}40%{transform:translateX(10px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}
+@keyframes shakeB{0%,100%{transform:translateX(0)}20%{transform:translateX(-10px)}40%{transform:translateX(10px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}
+button:focus-visible,input:focus-visible{outline:2px solid #0B6BD6;outline-offset:2px}
+button:disabled{cursor:default;opacity:.75}
+</style>
+</helmet>
+<div style="width: 960px; height: 700px; display: flex; flex-direction: column; font-family: Inter, -apple-system, system-ui, sans-serif; color: #1D1D1F; background: #17191D; overflow: hidden">
+
+  <div style="height: 76px; flex: none; display: flex; align-items: center; justify-content: center; gap: 14px">
+    <span style="font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #AEB4BE">Preview a package</span>
+    <div role="group" aria-label="Package type" style="display: flex; gap: 4px; padding: 4px; background: #2A2D33; border-radius: 12px">
+      <sc-for list="{{formats}}" as="f" hint-placeholder-count="3">
+        <button type="button" onClick="{{f.pick}}" aria-pressed="{{f.pressed}}" style="min-height: 44px; padding: 0 16px; border: 0; border-radius: 9px; font: 600 13px Inter, system-ui, sans-serif; cursor: pointer; background: {{f.bg}}; color: {{f.color}}; transition: background 180ms, color 180ms">{{f.label}}</button>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="flex: 1; position: relative; background: #58779A; overflow: hidden">
+
+    <div style="position: absolute; top: 0; left: 0; right: 0; height: 26px; display: flex; align-items: center; gap: 20px; padding: 0 16px; background: rgba(246,246,248,0.78); backdrop-filter: blur(20px); font-size: 13px; color: #1D1D1F; z-index: 3">
+      <span style="font-weight: 700">{{activeApp}}</span>
+      <span>File</span>
+      <span>Edit</span>
+      <span>View</span>
+      <span>Window</span>
+      <span>Help</span>
+    </div>
+
+    <div style="position: absolute; left: 64px; top: 64px; width: 440px; height: 286px; background: #FFFFFF; border-radius: 12px; box-shadow: 0 22px 50px rgba(0,0,0,0.32), 0 0 0 0.5px rgba(0,0,0,0.25); overflow: hidden; display: flex; flex-direction: column">
+      <div style="height: 48px; flex: none; display: flex; align-items: center; gap: 18px; padding: 0 16px; background: #F6F6F6; border-bottom: 1px solid #E3E3E6">
+        <div aria-hidden="true" style="display: flex; gap: 8px">
+          <span style="width: 12px; height: 12px; border-radius: 50%; background: #FF5F57; box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.15)"></span>
+          <span style="width: 12px; height: 12px; border-radius: 50%; background: #FEBC2E; box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.15)"></span>
+          <span style="width: 12px; height: 12px; border-radius: 50%; background: #28C840; box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.15)"></span>
+        </div>
+        <span style="font-size: 13px; font-weight: 700; color: #3A3A3C">Downloads</span>
+      </div>
+      <div style="flex: 1; padding: 22px 24px; display: flex; gap: 20px; align-items: flex-start">
+        <button type="button" onClick="{{onFileClick}}" onKeyDown="{{onFileKey}}" aria-label="{{fileAria}}" style="width: 132px; padding: 4px; border: 0; background: transparent; display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: default">
+          <span style="padding: 6px 10px; border-radius: 8px; background: {{fileIconBg}}; display: flex">
+            <svg width="64" height="76" viewBox="0 0 64 76" aria-hidden="true">
+              <path d="M6 2h36l20 20v48a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4z" fill="#FFFFFF" stroke="#C7C7CC" stroke-width="1.5"/>
+              <path d="M42 2v16a4 4 0 0 0 4 4h16" fill="#EDEDF0" stroke="#C7C7CC" stroke-width="1.5"/>
+              <rect x="15" y="22" width="30" height="30" rx="8" fill="{{accent}}"/>
+              <rect x="22" y="28" width="16" height="19" rx="2" fill="#FFFFFF"/>
+              <path d="M25 33h10M25 37h10M25 41h6" stroke="{{accent}}" stroke-width="1.6" stroke-linecap="round"/>
+              <rect x="13" y="58" width="34" height="11" rx="3" fill="{{fmt.tagColor}}"/>
+              <text x="30" y="66.2" font-size="7.5" font-weight="700" fill="#FFFFFF" text-anchor="middle" font-family="Inter, system-ui, sans-serif">{{fmt.tag}}</text>
+            </svg>
+          </span>
+          <span style="max-width: 124px; padding: 1px 6px; border-radius: 4px; font-size: 12px; line-height: 1.35; word-break: break-all; text-align: center; background: {{fileNameBg}}; color: {{fileNameColor}}">{{fmt.file}}</span>
+          <sc-if value="{{isDefault}}" hint-placeholder-val="{{false}}">
+            <span style="font-size: 11px; color: #6E6E73">Opens with Installer</span>
+          </sc-if>
+        </button>
+      </div>
+    </div>
+
+    <sc-if value="{{showHint}}" hint-placeholder-val="{{true}}">
+      <div style="position: absolute; left: 64px; top: 370px; width: 440px; display: flex; justify-content: center; animation: fadeIn 300ms ease-out">
+        <span style="padding: 8px 14px; border-radius: 16px; background: rgba(0,0,0,0.42); color: #FFFFFF; font-size: 13px; font-weight: 500">Double-click the package to open it</span>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{installerOpen}}" hint-placeholder-val="{{false}}">
+      <div style="position: absolute; left: 180px; top: 112px; width: 600px; height: 400px; background: #F5F5F7; border-radius: 12px; box-shadow: 0 30px 70px rgba(0,0,0,0.4), 0 0 0 0.5px rgba(0,0,0,0.3); overflow: hidden; display: flex; flex-direction: column; animation: winOpen 300ms cubic-bezier(.2,.9,.3,1.1); z-index: 2">
+
+        <div style="height: 40px; flex: none; display: flex; align-items: center; padding: 0 6px; background: #ECECEE; border-bottom: 1px solid #D8D8DC; position: relative">
+          <div style="position: absolute; left: 0; right: 0; text-align: center; font-size: 13px; font-weight: 700; color: #3A3A3C; pointer-events: none">{{windowTitle}}</div>
+          <div style="position: relative; display: flex; align-items: center">
+            <button type="button" aria-label="Close" onClick="{{closeInstaller}}" style="width: 28px; height: 28px; padding: 0; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer">
+              <span style="width: 12px; height: 12px; border-radius: 50%; background: #FF5F57; box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.15)"></span>
+            </button>
+            <span aria-hidden="true" style="width: 12px; height: 12px; margin: 0 8px 0 2px; border-radius: 50%; background: #FEBC2E; box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.15)"></span>
+            <span aria-hidden="true" style="width: 12px; height: 12px; border-radius: 50%; background: #28C840; box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.15)"></span>
+          </div>
+        </div>
+
+        <div style="flex: 1; position: relative; min-height: 0">
+
+          <sc-if value="{{showDrop}}" hint-placeholder-val="{{true}}">
+            <div style="height: 100%; box-sizing: border-box; padding: 24px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 34px">
+              <div style="display: flex; align-items: flex-start; gap: 56px">
+
+                <div style="width: 128px; display: flex; flex-direction: column; align-items: center; gap: 10px; position: relative; z-index: 2">
+                  <button type="button" onPointerDown="{{onIconDown}}" onPointerMove="{{onIconMove}}" onPointerUp="{{onIconUp}}" onPointerCancel="{{onIconCancel}}" onKeyDown="{{onIconKey}}" aria-label="Lumen Notes. Drag into Applications to install." style="width: 112px; height: 112px; padding: 0; border: 0; background: transparent; cursor: {{iconCursor}}; touch-action: none; user-select: none; -webkit-user-select: none; transform: {{iconTransform}}; opacity: {{iconOpacity}}; filter: {{iconFilter}}; transition: {{iconTransition}}">
+                    <svg width="112" height="112" viewBox="0 0 112 112" aria-hidden="true">
+                      <rect x="4" y="4" width="104" height="104" rx="24" fill="{{accent}}"/>
+                      <rect x="30" y="24" width="52" height="64" rx="6" fill="#FFFFFF"/>
+                      <path d="M40 42h32M40 52h32M40 62h20" stroke="{{accent}}" stroke-width="4" stroke-linecap="round"/>
+                      <circle cx="75" cy="77" r="10" fill="#FFC94D"/>
+                    </svg>
+                  </button>
+                  <span style="font-size: 13px; font-weight: 600">Lumen Notes</span>
+                </div>
+
+                <div aria-hidden="true" style="width: 120px; height: 112px; display: flex; align-items: center">
+                  <svg width="120" height="24" viewBox="0 0 120 24"><path d="M4 12H106" stroke="#AEAEB2" stroke-width="2.5" stroke-dasharray="6 6" stroke-linecap="round" style="animation: dash 900ms linear infinite"/><path d="M100 4l10 8-10 8" fill="none" stroke="#AEAEB2" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+
+                <div ref="{{folderRef}}" style="width: 128px; display: flex; flex-direction: column; align-items: center; gap: 10px">
+                  <div style="width: 112px; height: 112px; border-radius: 22px; display: flex; align-items: center; justify-content: center; background: {{folderBg}}; transform: {{folderTransform}}; transition: background 140ms, transform 180ms; animation: {{folderAnim}}">
+                    <svg width="96" height="80" viewBox="0 0 96 80" aria-hidden="true">
+                      <path d="M6 14a6 6 0 0 1 6-6h22l8 8h42a6 6 0 0 1 6 6v6H6z" fill="#3D8FE0"/>
+                      <rect x="6" y="22" width="84" height="52" rx="6" fill="#5AACF5"/>
+                      <rect x="34" y="34" width="12" height="12" rx="3" fill="#2F7BD0" fill-opacity="0.75"/>
+                      <rect x="50" y="34" width="12" height="12" rx="3" fill="#2F7BD0" fill-opacity="0.75"/>
+                      <rect x="34" y="50" width="12" height="12" rx="3" fill="#2F7BD0" fill-opacity="0.75"/>
+                      <rect x="50" y="50" width="12" height="12" rx="3" fill="#2F7BD0" fill-opacity="0.75"/>
+                    </svg>
+                  </div>
+                  <span style="font-size: 13px; font-weight: 600">Applications</span>
+                </div>
+              </div>
+
+              <div style="display: flex; flex-direction: column; align-items: center; gap: 8px">
+                <p style="margin: 0; font-size: 14px; color: #3A3A3C">Drag <strong>Lumen Notes</strong> into Applications</p>
+                <sc-if value="{{showLock}}" hint-placeholder-val="{{false}}">
+                  <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #6E6E73">
+                    <svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12"><rect x="2" y="5.5" width="8" height="5.5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+                    You’ll be asked for your password
+                  </span>
+                </sc-if>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{askDefault}}" hint-placeholder-val="{{false}}">
+            <div style="position: absolute; inset: 0; background: rgba(245,245,247,0.55); animation: fadeIn 200ms ease-out; z-index: 3">
+              <div style="position: absolute; top: 0; left: 50%; width: 340px; box-sizing: border-box; padding: 22px 22px 18px; background: #FFFFFF; border-radius: 0 0 14px 14px; box-shadow: 0 16px 36px rgba(0,0,0,0.2), 0 0 0 0.5px rgba(0,0,0,0.15); transform: translate(-50%,0); animation: sheetDown 320ms cubic-bezier(.2,.8,.2,1); display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center">
+                <svg width="52" height="52" viewBox="0 0 64 64" aria-hidden="true">
+                  <rect x="2" y="2" width="60" height="60" rx="14" fill="#F2F2F7" stroke="#D1D1D6"/>
+                  <path d="M14 26l18-9 18 9v20l-18 9-18-9z" fill="#D6B28A"/>
+                  <path d="M14 26l18 9 18-9M32 35v20" fill="none" stroke="#9A7650" stroke-width="2" stroke-linejoin="round"/>
+                  <path d="M32 6v14M26 15l6 6 6-6" fill="none" stroke="{{accent}}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <div>
+                  <h2 style="margin: 0; font-size: 14px; font-weight: 700">Open apps you download with Installer?</h2>
+                  <p style="margin: 6px 0 0; font-size: 12.5px; line-height: 1.45; color: #6E6E73">Any app you download will open here, ready to drag into Applications.</p>
+                </div>
+                <div style="width: 100%; display: flex; gap: 8px; margin-top: 4px">
+                  <button type="button" onClick="{{notNow}}" style="flex: 1; min-height: 36px; border: 0; border-radius: 8px; background: #E8E8ED; color: #1D1D1F; font: 600 13px Inter, system-ui, sans-serif; cursor: pointer">Not Now</button>
+                  <button type="button" onClick="{{makeDefault}}" style="flex: 1; min-height: 36px; border: 0; border-radius: 8px; background: {{accent}}; color: #FFFFFF; font: 600 13px Inter, system-ui, sans-serif; cursor: pointer">Make Default</button>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{installing}}" hint-placeholder-val="{{false}}">
+            <div style="height: 100%; box-sizing: border-box; padding: 32px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; animation: rise 320ms ease-out">
+              <svg width="72" height="72" viewBox="0 0 112 112" aria-hidden="true">
+                <rect x="4" y="4" width="104" height="104" rx="24" fill="{{accent}}"/>
+                <rect x="30" y="24" width="52" height="64" rx="6" fill="#FFFFFF"/>
+                <path d="M40 42h32M40 52h32M40 62h20" stroke="{{accent}}" stroke-width="4" stroke-linecap="round"/>
+                <circle cx="75" cy="77" r="10" fill="#FFC94D"/>
+              </svg>
+              <h2 style="margin: 0; font-size: 16px; font-weight: 700">Installing Lumen Notes</h2>
+              <div style="width: 360px; display: flex; flex-direction: column; gap: 8px">
+                <div role="progressbar" aria-label="Install progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{pct}}" style="height: 6px; border-radius: 3px; background: #DCDCE1; overflow: hidden">
+                  <div style="height: 100%; width: {{pct}}%; background: {{accent}}; border-radius: 3px; transition: width 140ms linear"></div>
+                </div>
+                <div style="display: flex; justify-content: space-between; gap: 12px; font-size: 12px">
+                  <span style="color: #3A3A3C">{{statusText}}</span>
+                  <span style="color: #6E6E73">{{timeLeft}}</span>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{done}}" hint-placeholder-val="{{false}}">
+            <div style="height: 100%; box-sizing: border-box; padding: 32px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center">
+              <div style="width: 72px; height: 72px; border-radius: 50%; background: #2E9E4F; display: flex; align-items: center; justify-content: center; animation: pop 560ms cubic-bezier(.2,.9,.3,1.2)">
+                <svg aria-hidden="true" width="34" height="34" viewBox="0 0 36 36"><path d="M9 18.5l6 6 12-13" fill="none" stroke="#FFFFFF" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+              <h2 style="margin: 6px 0 0; font-size: 19px; font-weight: 700; animation: rise 360ms ease-out">Lumen Notes is ready</h2>
+              <p style="margin: 0; max-width: 380px; font-size: 13px; line-height: 1.5; color: #6E6E73; animation: rise 420ms ease-out">{{fmt.doneText}}</p>
+              <div style="display: flex; gap: 10px; margin-top: 10px">
+                <button type="button" onClick="{{closeInstaller}}" style="min-width: 110px; min-height: 36px; border: 0; border-radius: 8px; background: #E8E8ED; color: #1D1D1F; font: 600 13px Inter, system-ui, sans-serif; cursor: pointer">Done</button>
+                <button type="button" onClick="{{openApp}}" style="min-width: 110px; min-height: 36px; border: 0; border-radius: 8px; background: {{accent}}; color: #FFFFFF; font: 600 13px Inter, system-ui, sans-serif; cursor: pointer">{{openLabel}}</button>
+              </div>
+            </div>
+          </sc-if>
+
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{showAuth}}" hint-placeholder-val="{{false}}">
+      <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.28); display: flex; align-items: center; justify-content: center; animation: fadeIn 220ms ease-out; z-index: 4">
+        <div style="width: 300px; box-sizing: border-box; padding: 24px 20px 18px; background: #F6F6F8; border-radius: 14px; box-shadow: 0 24px 60px rgba(0,0,0,0.35), 0 0 0 0.5px rgba(0,0,0,0.25); animation: authIn 260ms cubic-bezier(.2,.9,.3,1.1)">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; animation: {{shakeAnim}}">
+            <div style="position: relative; width: 64px; height: 64px">
+              <svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">
+                <rect x="2" y="2" width="60" height="60" rx="14" fill="#FFFFFF" stroke="#D1D1D6"/>
+                <path d="M14 26l18-9 18 9v20l-18 9-18-9z" fill="#D6B28A"/>
+                <path d="M14 26l18 9 18-9M32 35v20" fill="none" stroke="#9A7650" stroke-width="2" stroke-linejoin="round"/>
+                <path d="M32 6v14M26 15l6 6 6-6" fill="none" stroke="{{accent}}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span aria-hidden="true" style="position: absolute; right: -6px; bottom: -6px; width: 28px; height: 28px; border-radius: 50%; background: #FFFFFF; box-shadow: 0 1px 4px rgba(0,0,0,0.25); display: flex; align-items: center; justify-content: center; color: #3A3A3C">
+                <svg width="14" height="14" viewBox="0 0 14 14"><rect x="2.5" y="6" width="9" height="6.5" rx="1.5" fill="currentColor"/><path d="M4.5 6V4.5a2.5 2.5 0 0 1 5 0V6" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+              </span>
+            </div>
+            <div>
+              <h2 style="margin: 0; font-size: 13px; font-weight: 700; line-height: 1.4">Installer wants to add Lumen Notes for everyone on this computer.</h2>
+              <p style="margin: 6px 0 0; font-size: 12px; color: #6E6E73">Enter your password to allow this.</p>
+            </div>
+            <div style="width: 100%; display: flex; flex-direction: column; gap: 6px; text-align: left">
+              <label for="installer-pw" style="font-size: 12px; font-weight: 600; color: #3A3A3C">Password</label>
+              <input id="installer-pw" type="password" autocomplete="current-password" value="{{password}}" onChange="{{onPw}}" onKeyDown="{{onPwKey}}" disabled="{{authing}}" style="height: 34px; box-sizing: border-box; padding: 0 10px; border: 1px solid {{inputBorder}}; border-radius: 7px; font: 14px Inter, system-ui, sans-serif; color: #1D1D1F; background: #FFFFFF"/>
+              <sc-if value="{{hasError}}" hint-placeholder-val="{{false}}">
+                <span role="alert" style="font-size: 12px; color: #B42318">{{error}}</span>
+              </sc-if>
+            </div>
+            <div style="width: 100%; display: flex; gap: 8px">
+              <button type="button" onClick="{{cancelAuth}}" disabled="{{authing}}" style="flex: 1; min-height: 36px; border: 0; border-radius: 8px; background: #E3E3E8; color: #1D1D1F; font: 600 13px Inter, system-ui, sans-serif; cursor: pointer">Cancel</button>
+              <button type="button" onClick="{{authenticate}}" disabled="{{authing}}" style="flex: 1; min-height: 36px; border: 0; border-radius: 8px; background: {{accent}}; color: #FFFFFF; font: 600 13px Inter, system-ui, sans-serif; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px">
+                <sc-if value="{{authing}}" hint-placeholder-val="{{false}}">
+                  <span aria-hidden="true" style="width: 12px; height: 12px; box-sizing: border-box; border: 2px solid rgba(255,255,255,0.4); border-top-color: #FFFFFF; border-radius: 50%; animation: spin 700ms linear infinite"></span>
+                </sc-if>
+                <span>{{allowLabel}}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{toast}}" hint-placeholder-val="{{false}}">
+      <div role="status" style="position: absolute; top: 36px; right: 14px; width: 300px; box-sizing: border-box; padding: 12px 14px; display: flex; gap: 12px; align-items: center; background: rgba(246,246,248,0.94); backdrop-filter: blur(20px); border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.25); animation: toastIn 340ms cubic-bezier(.2,.9,.3,1.1); z-index: 5">
+        <svg width="36" height="36" viewBox="0 0 64 64" aria-hidden="true">
+          <rect x="2" y="2" width="60" height="60" rx="14" fill="#FFFFFF" stroke="#D1D1D6"/>
+          <path d="M14 26l18-9 18 9v20l-18 9-18-9z" fill="#D6B28A"/>
+          <path d="M14 26l18 9 18-9M32 35v20" fill="none" stroke="#9A7650" stroke-width="2" stroke-linejoin="round"/>
+          <path d="M32 6v14M26 15l6 6 6-6" fill="none" stroke="{{accent}}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div>
+          <div style="font-size: 13px; font-weight: 700">Installer is now your default</div>
+          <div style="margin-top: 2px; font-size: 12px; color: #48484A">Apps you download will open here.</div>
+        </div>
+      </div>
+    </sc-if>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#0B6BD6","options":["#0B6BD6","#0F7A5F","#C2410C","#7C3AED"]},"$preview":{"width":960,"height":700}}'>
+class Component extends DCLogic {
+  constructor(...args) {
+    super(...args);
+    this.state = {
+      format: 'deb', phase: 'desktop', isDefault: false, selected: false,
+      password: '', error: '', shake: 0, progress: 0,
+      dragging: false, dx: 0, dy: 0, hover: false, launched: false, toast: false
+    };
+    this.timers = [];
+    this.ticker = null;
+    this.toastTimer = null;
+    this.lastClick = 0;
+    this.folderEl = null;
+    this.folderRef = (el) => { this.folderEl = el; };
+  }
+
+  data() {
+    return {
+      appimage: {
+        label: 'AppImage', tag: 'APP', tagColor: '#4B48C9',
+        file: 'Lumen_Notes-2.4.1.AppImage',
+        needsAuth: false,
+        steps: ['Copying Lumen Notes', 'Adding it to your apps'],
+        doneText: 'You’ll find it with your other apps. It was added just for you, so no password was needed.'
+      },
+      deb: {
+        label: '.deb · Ubuntu, Mint', tag: 'DEB', tagColor: '#B0174E',
+        file: 'lumen-notes_2.4.1.deb',
+        needsAuth: true,
+        steps: ['Checking the package', 'Getting a few things it needs', 'Installing Lumen Notes', 'Adding it to your apps'],
+        doneText: 'You’ll find it with your other apps. Everyone on this computer can use it, and it stays up to date with your regular updates.'
+      },
+      rpm: {
+        label: '.rpm · Fedora', tag: 'RPM', tagColor: '#1F5FB8',
+        file: 'lumen-notes-2.4.1.rpm',
+        needsAuth: true,
+        steps: ['Checking the package', 'Getting a few things it needs', 'Installing Lumen Notes', 'Adding it to your apps'],
+        doneText: 'You’ll find it with your other apps. Everyone on this computer can use it, and it stays up to date with your regular updates.'
+      }
+    };
+  }
+
+  componentWillUnmount() {
+    this.clearAll();
+    if (this.toastTimer) clearTimeout(this.toastTimer);
+  }
+
+  clearAll() {
+    this.timers.forEach((t) => clearTimeout(t));
+    this.timers = [];
+    if (this.ticker) { clearInterval(this.ticker); this.ticker = null; }
+  }
+
+  later(fn, ms) { this.timers.push(setTimeout(fn, ms)); }
+
+  freshInstallState() {
+    return { password: '', error: '', progress: 0, dragging: false, dx: 0, dy: 0, hover: false, launched: false };
+  }
+
+  openFile() {
+    if (this.state.phase !== 'desktop') return;
+    this.setState({ ...this.freshInstallState(), selected: false, phase: this.state.isDefault ? 'idle' : 'askDefault' });
+  }
+
+  closeInstaller() {
+    this.clearAll();
+    this.setState({ ...this.freshInstallState(), phase: 'desktop', selected: false });
+  }
+
+  makeDefault() {
+    this.setState({ isDefault: true, phase: 'idle', toast: true });
+    if (this.toastTimer) clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => this.setState({ toast: false }), 3600);
+  }
+
+  drop() {
+    if (this.state.phase !== 'idle') return;
+    const needsAuth = this.data()[this.state.format].needsAuth;
+    this.setState({ phase: 'flying', hover: false, dragging: false });
+    this.later(() => {
+      if (needsAuth) this.setState({ phase: 'auth', password: '', error: '' });
+      else this.beginCopy();
+    }, 560);
+  }
+
+  cancelAuth() {
+    this.clearAll();
+    this.setState({ ...this.freshInstallState(), phase: 'idle' });
+  }
+
+  authenticate() {
+    if (this.state.phase !== 'auth') return;
+    if (!this.state.password) {
+      this.setState({ error: 'Enter your password to continue.', shake: this.state.shake + 1 });
+      return;
+    }
+    this.setState({ phase: 'authing', error: '' });
+    this.later(() => this.beginCopy(), 950);
+  }
+
+  beginCopy() {
+    this.setState({ phase: 'installing', progress: 0, password: '' });
+    let tick = 0;
+    this.ticker = setInterval(() => {
+      tick += 1;
+      const inc = 1.6 + (tick % 4) * 0.8;
+      const p = Math.min(100, this.state.progress + inc);
+      this.setState({ progress: p });
+      if (p >= 100) {
+        clearInterval(this.ticker);
+        this.ticker = null;
+        this.later(() => this.setState({ phase: 'done' }), 500);
+      }
+    }, 110);
+  }
+
+  renderVals() {
+    const s = this.state;
+    const D = this.data();
+    const f = D[s.format];
+    const accent = this.props.accent ?? '#0B6BD6';
+    const phase = s.phase;
+    const n = f.steps.length;
+    const cur = Math.min(n - 1, Math.floor((s.progress / 100) * n));
+    const secs = Math.ceil((100 - s.progress) / 25.5);
+    const flown = phase === 'flying' || phase === 'auth' || phase === 'authing';
+    const installerOpen = phase !== 'desktop';
+
+    let iconTransform = 'translate(0px, 0px) scale(1)';
+    if (flown) iconTransform = 'translate(360px, 0px) scale(0.25)';
+    else if (s.dragging) iconTransform = 'translate(' + s.dx + 'px, ' + s.dy + 'px) scale(1.06)';
+
+    let iconTransition = 'transform 360ms cubic-bezier(.3,1.4,.5,1), opacity 300ms ease-out, filter 200ms';
+    if (s.dragging) iconTransition = 'filter 150ms';
+    else if (flown) iconTransition = 'transform 500ms cubic-bezier(.4,0,.2,1), opacity 500ms ease-in';
+
+    return {
+      accent,
+      fmt: f,
+      formats: ['appimage', 'deb', 'rpm'].map((k) => ({
+        label: D[k].label,
+        pressed: k === s.format ? 'true' : 'false',
+        bg: k === s.format ? '#F5F5F7' : 'transparent',
+        color: k === s.format ? '#1D1D1F' : '#C9CDD4',
+        pick: () => {
+          this.clearAll();
+          this.setState({ ...this.freshInstallState(), format: k, phase: 'desktop', selected: false });
+        }
+      })),
+      activeApp: installerOpen ? 'Installer' : 'Files',
+      isDefault: s.isDefault,
+      showHint: phase === 'desktop',
+      fileAria: f.file + ', app package. Double-click to open.',
+      fileIconBg: s.selected ? 'rgba(0,0,0,0.08)' : 'transparent',
+      fileNameBg: s.selected ? accent : 'transparent',
+      fileNameColor: s.selected ? '#FFFFFF' : '#1D1D1F',
+      onFileClick: () => {
+        const now = Date.now();
+        if (this.state.selected && now - this.lastClick < 500) this.openFile();
+        else this.setState({ selected: true });
+        this.lastClick = now;
+      },
+      onFileKey: (e) => { if (e.key === 'Enter') { e.preventDefault(); this.openFile(); } },
+
+      installerOpen,
+      windowTitle: phase === 'installing' ? 'Installing Lumen Notes' : 'Lumen Notes',
+      showDrop: phase === 'askDefault' || phase === 'idle' || flown,
+      askDefault: phase === 'askDefault',
+      showAuth: phase === 'auth' || phase === 'authing',
+      authing: phase === 'authing',
+      installing: phase === 'installing',
+      done: phase === 'done',
+      showLock: f.needsAuth,
+
+      iconTransform,
+      iconTransition,
+      iconOpacity: flown ? '0' : '1',
+      iconFilter: s.dragging ? 'drop-shadow(0 14px 18px rgba(0,0,0,0.28))' : 'drop-shadow(0 4px 6px rgba(0,0,0,0.12))',
+      iconCursor: s.dragging ? 'grabbing' : 'grab',
+      folderRef: this.folderRef,
+      folderBg: s.hover ? 'rgba(0,0,0,0.10)' : 'transparent',
+      folderTransform: s.hover ? 'scale(1.07)' : 'scale(1)',
+      folderAnim: phase === 'flying' ? 'folderGulp 420ms ease-out 320ms' : 'none',
+
+      onIconDown: (e) => {
+        if (this.state.phase !== 'idle') return;
+        const el = e.currentTarget;
+        const r = el.getBoundingClientRect();
+        this.scale = r.width / 112 || 1;
+        this.origin = { x: e.clientX, y: e.clientY };
+        try { el.setPointerCapture(e.pointerId); } catch (_) {}
+        this.setState({ dragging: true, dx: 0, dy: 0 });
+      },
+      onIconMove: (e) => {
+        if (!this.state.dragging) return;
+        const dx = (e.clientX - this.origin.x) / this.scale;
+        const dy = (e.clientY - this.origin.y) / this.scale;
+        let hover = false;
+        if (this.folderEl) {
+          const fr = this.folderEl.getBoundingClientRect();
+          hover = e.clientX >= fr.left && e.clientX <= fr.right && e.clientY >= fr.top && e.clientY <= fr.bottom;
+        }
+        this.setState({ dx, dy, hover });
+      },
+      onIconUp: () => {
+        if (!this.state.dragging) return;
+        if (this.state.hover) { this.setState({ dragging: false, hover: false }); this.drop(); }
+        else this.setState({ dragging: false, dx: 0, dy: 0, hover: false });
+      },
+      onIconCancel: () => this.setState({ dragging: false, dx: 0, dy: 0, hover: false }),
+      onIconKey: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.drop(); } },
+
+      notNow: () => this.setState({ phase: 'idle' }),
+      makeDefault: () => this.makeDefault(),
+
+      shakeAnim: s.shake === 0 ? 'none' : (s.shake % 2 ? 'shakeA 380ms' : 'shakeB 380ms'),
+      password: s.password,
+      error: s.error,
+      hasError: !!s.error,
+      inputBorder: s.error ? '#B42318' : '#C7C7CC',
+      allowLabel: phase === 'authing' ? 'Checking…' : 'Allow',
+      onPw: (e) => this.setState({ password: e.target.value, error: '' }),
+      onPwKey: (e) => {
+        if (e.key === 'Enter') this.authenticate();
+        if (e.key === 'Escape') this.cancelAuth();
+      },
+      authenticate: () => this.authenticate(),
+      cancelAuth: () => this.cancelAuth(),
+
+      pct: Math.round(s.progress),
+      statusText: s.progress >= 100 ? 'Finishing up…' : f.steps[cur] + '…',
+      timeLeft: s.progress >= 100 ? '' : (secs <= 1 ? 'Less than a second left' : 'About ' + secs + ' seconds left'),
+
+      closeInstaller: () => this.closeInstaller(),
+      openLabel: s.launched ? 'Opening…' : 'Open',
+      openApp: () => {
+        if (this.state.launched) return;
+        this.setState({ launched: true });
+        this.later(() => this.closeInstaller(), 1100);
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>

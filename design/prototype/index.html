@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Installer Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+:root{--accent:#0B6BD6;--ink:#1D1D1F;--muted:#6E6E73;--font:Inter,-apple-system,system-ui,sans-serif}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;height:100%}
+body{background:#17191D;font-family:var(--font);color:var(--ink);overflow:hidden}
+button{font-family:var(--font)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button:disabled{cursor:default;opacity:.75}
+
+#fit{position:absolute;left:50%;top:50%;width:960px;height:700px;transform-origin:center}
+.frame{width:960px;height:700px;display:flex;flex-direction:column;overflow:hidden}
+
+/* demo switcher */
+.switcher{height:76px;flex:none;display:flex;align-items:center;justify-content:center;gap:14px}
+.switcher-label{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#AEB4BE}
+.seg{display:flex;gap:4px;padding:4px;background:#2A2D33;border-radius:12px}
+.seg button{min-height:44px;padding:0 16px;border:0;border-radius:9px;font-weight:600;font-size:13px;cursor:pointer;background:transparent;color:#C9CDD4;transition:background 180ms,color 180ms}
+.seg button[aria-pressed="true"]{background:#F5F5F7;color:var(--ink)}
+
+/* desktop */
+.screen{flex:1;position:relative;background:#58779A;overflow:hidden}
+.menubar{position:absolute;top:0;left:0;right:0;height:26px;display:flex;align-items:center;gap:20px;padding:0 16px;background:rgba(246,246,248,.78);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);font-size:13px;z-index:3}
+.menubar b{font-weight:700}
+.lights{display:flex;gap:8px;align-items:center}
+.light{width:12px;height:12px;border-radius:50%;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.15);display:block}
+.red{background:#FF5F57}.yellow{background:#FEBC2E}.green{background:#28C840}
+
+.finder{position:absolute;left:64px;top:64px;width:440px;height:286px;background:#fff;border-radius:12px;box-shadow:0 22px 50px rgba(0,0,0,.32),0 0 0 .5px rgba(0,0,0,.25);overflow:hidden;display:flex;flex-direction:column}
+.finder-bar{height:48px;flex:none;display:flex;align-items:center;gap:18px;padding:0 16px;background:#F6F6F6;border-bottom:1px solid #E3E3E6}
+.finder-title{font-size:13px;font-weight:700;color:#3A3A3C}
+.finder-body{flex:1;padding:22px 24px;display:flex;gap:20px;align-items:flex-start}
+.file{width:132px;padding:4px;border:0;background:transparent;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:default}
+.file-icon{padding:6px 10px;border-radius:8px;display:flex}
+.file-name{max-width:124px;padding:1px 6px;border-radius:4px;font-size:12px;line-height:1.35;word-break:break-all;text-align:center}
+.file.selected .file-icon{background:rgba(0,0,0,.08)}
+.file.selected .file-name{background:var(--accent);color:#fff}
+.file-sub{font-size:11px;color:var(--muted)}
+.hint{position:absolute;left:64px;top:370px;width:440px;display:flex;justify-content:center;animation:fadeIn 300ms ease-out}
+.hint span{padding:8px 14px;border-radius:16px;background:rgba(0,0,0,.42);color:#fff;font-size:13px;font-weight:500}
+
+/* installer window */
+.win{position:absolute;left:180px;top:112px;width:600px;height:400px;background:#F5F5F7;border-radius:12px;box-shadow:0 30px 70px rgba(0,0,0,.4),0 0 0 .5px rgba(0,0,0,.3);overflow:hidden;display:flex;flex-direction:column;animation:winOpen 300ms cubic-bezier(.2,.9,.3,1.1);z-index:2}
+.win-bar{height:40px;flex:none;display:flex;align-items:center;padding:0 6px;background:#ECECEE;border-bottom:1px solid #D8D8DC;position:relative}
+.win-title{position:absolute;left:0;right:0;text-align:center;font-size:13px;font-weight:700;color:#3A3A3C;pointer-events:none}
+.close-btn{width:28px;height:28px;padding:0;border:0;background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.win-body{flex:1;position:relative;min-height:0}
+
+.view{height:100%;padding:24px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.drop-view{gap:34px}
+.row{display:flex;align-items:flex-start;gap:56px}
+.col{width:128px;display:flex;flex-direction:column;align-items:center;gap:10px}
+.col span{font-size:13px;font-weight:600}
+#appIcon{width:112px;height:112px;padding:0;border:0;background:transparent;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;position:relative;z-index:2;filter:drop-shadow(0 4px 6px rgba(0,0,0,.12));transition:transform 360ms cubic-bezier(.3,1.4,.5,1),opacity 300ms ease-out,filter 200ms}
+#appIcon.dragging{cursor:grabbing;transition:filter 150ms;filter:drop-shadow(0 14px 18px rgba(0,0,0,.28))}
+#appIcon.flown{opacity:0;transform:translate(360px,0) scale(.25);transition:transform 500ms cubic-bezier(.4,0,.2,1),opacity 500ms ease-in}
+.arrow{width:120px;height:112px;display:flex;align-items:center}
+.arrow path.dash{animation:dash 900ms linear infinite}
+.folder-tile{width:112px;height:112px;border-radius:22px;display:flex;align-items:center;justify-content:center;transition:background 140ms,transform 180ms}
+.folder-tile.hover{background:rgba(0,0,0,.10);transform:scale(1.07)}
+.folder-tile.gulp{animation:folderGulp 420ms ease-out 320ms}
+.drop-text{display:flex;flex-direction:column;align-items:center;gap:8px}
+.drop-text p{margin:0;font-size:14px;color:#3A3A3C}
+.lock-note{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+
+.sheet-dim{position:absolute;inset:0;background:rgba(245,245,247,.55);animation:fadeIn 200ms ease-out;z-index:3}
+.sheet{position:absolute;top:0;left:50%;width:340px;padding:22px 22px 18px;background:#fff;border-radius:0 0 14px 14px;box-shadow:0 16px 36px rgba(0,0,0,.2),0 0 0 .5px rgba(0,0,0,.15);transform:translate(-50%,0);animation:sheetDown 320ms cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center}
+h2{margin:0}
+.sheet h2{font-size:14px;font-weight:700}
+.sheet p{margin:6px 0 0;font-size:12.5px;line-height:1.45;color:var(--muted)}
+.btn-row{width:100%;display:flex;gap:8px}
+.btn{flex:1;min-height:36px;border:0;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn.secondary{background:#E8E8ED;color:var(--ink)}
+.btn.primary{background:var(--accent);color:#fff}
+.btn.fixed{flex:none;min-width:110px}
+
+.install-view{gap:16px;padding:32px;animation:rise 320ms ease-out}
+.install-view h2{font-size:16px;font-weight:700}
+.progress-wrap{width:360px;display:flex;flex-direction:column;gap:8px}
+.track{height:6px;border-radius:3px;background:#DCDCE1;overflow:hidden}
+.fill{height:100%;width:0;background:var(--accent);border-radius:3px;transition:width 140ms linear}
+.progress-meta{display:flex;justify-content:space-between;gap:12px;font-size:12px}
+.progress-meta span:first-child{color:#3A3A3C}
+.progress-meta span:last-child{color:var(--muted)}
+
+.done-view{gap:12px;padding:32px;text-align:center}
+.check{width:72px;height:72px;border-radius:50%;background:#2E9E4F;display:flex;align-items:center;justify-content:center;animation:pop 560ms cubic-bezier(.2,.9,.3,1.2)}
+.done-view h2{margin-top:6px;font-size:19px;font-weight:700;animation:rise 360ms ease-out}
+.done-view p{margin:0;max-width:380px;font-size:13px;line-height:1.5;color:var(--muted);animation:rise 420ms ease-out}
+
+/* auth dialog */
+.auth-dim{position:absolute;inset:0;background:rgba(0,0,0,.28);display:flex;align-items:center;justify-content:center;animation:fadeIn 220ms ease-out;z-index:4}
+.auth{width:300px;padding:24px 20px 18px;background:#F6F6F8;border-radius:14px;box-shadow:0 24px 60px rgba(0,0,0,.35),0 0 0 .5px rgba(0,0,0,.25);animation:authIn 260ms cubic-bezier(.2,.9,.3,1.1)}
+.auth-inner{display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
+.auth-inner.shake{animation:shake 380ms}
+.auth-icon{position:relative;width:64px;height:64px}
+.lock-badge{position:absolute;right:-6px;bottom:-6px;width:28px;height:28px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;color:#3A3A3C}
+.auth h2{font-size:13px;font-weight:700;line-height:1.4}
+.auth p{margin:6px 0 0;font-size:12px;color:var(--muted)}
+.field{width:100%;display:flex;flex-direction:column;gap:6px;text-align:left}
+.field label{font-size:12px;font-weight:600;color:#3A3A3C}
+.field input{height:34px;padding:0 10px;border:1px solid #C7C7CC;border-radius:7px;font:14px var(--font);color:var(--ink);background:#fff}
+.field input.invalid{border-color:#B42318}
+.error{font-size:12px;color:#B42318}
+.spinner{width:12px;height:12px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin 700ms linear infinite}
+
+/* toast */
+.toast{position:absolute;top:36px;right:14px;width:300px;padding:12px 14px;display:flex;gap:12px;align-items:center;background:rgba(246,246,248,.94);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.25);animation:toastIn 340ms cubic-bezier(.2,.9,.3,1.1);z-index:5}
+.toast b{display:block;font-size:13px}
+.toast span{display:block;margin-top:2px;font-size:12px;color:#48484A}
+
+@keyframes winOpen{from{opacity:0;transform:scale(.86)}to{opacity:1;transform:scale(1)}}
+@keyframes sheetDown{from{transform:translate(-50%,-110%)}to{transform:translate(-50%,0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes authIn{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:scale(1)}}
+@keyframes toastIn{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:none}}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes pop{0%{transform:scale(.4);opacity:0}60%{transform:scale(1.12);opacity:1}100%{transform:scale(1);opacity:1}}
+@keyframes folderGulp{0%{transform:scale(1)}45%{transform:scale(1.14)}100%{transform:scale(1)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes dash{to{stroke-dashoffset:-24}}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-10px)}40%{transform:translateX(10px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:1ms!important;transition-duration:1ms!important}}
+</style>
+</head>
+<body>
+
+<!-- Reusable icons -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-app" viewBox="0 0 112 112">
+      <rect x="4" y="4" width="104" height="104" rx="24" fill="var(--accent)"/>
+      <rect x="30" y="24" width="52" height="64" rx="6" fill="#fff"/>
+      <path d="M40 42h32M40 52h32M40 62h20" stroke="var(--accent)" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="75" cy="77" r="10" fill="#FFC94D"/>
+    </symbol>
+    <symbol id="i-installer" viewBox="0 0 64 64">
+      <rect x="2" y="2" width="60" height="60" rx="14" fill="#fff" stroke="#D1D1D6"/>
+      <path d="M14 26l18-9 18 9v20l-18 9-18-9z" fill="#D6B28A"/>
+      <path d="M14 26l18 9 18-9M32 35v20" fill="none" stroke="#9A7650" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M32 6v14M26 15l6 6 6-6" fill="none" stroke="var(--accent)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div id="fit">
+<div class="frame">
+
+  <div class="switcher">
+    <span class="switcher-label" id="segLabel">Preview a package</span>
+    <div class="seg" role="group" aria-labelledby="segLabel">
+      <button type="button" data-format="appimage" aria-pressed="false">AppImage</button>
+      <button type="button" data-format="deb" aria-pressed="true">.deb · Ubuntu, Mint</button>
+      <button type="button" data-format="rpm" aria-pressed="false">.rpm · Fedora</button>
+    </div>
+  </div>
+
+  <div class="screen" id="screen">
+    <div class="menubar">
+      <b id="activeApp">Files</b><span>File</span><span>Edit</span><span>View</span><span>Window</span><span>Help</span>
+    </div>
+
+    <div class="finder">
+      <div class="finder-bar">
+        <div class="lights" aria-hidden="true"><span class="light red"></span><span class="light yellow"></span><span class="light green"></span></div>
+        <span class="finder-title">Downloads</span>
+      </div>
+      <div class="finder-body">
+        <button type="button" class="file" id="file">
+          <span class="file-icon">
+            <svg width="64" height="76" viewBox="0 0 64 76" aria-hidden="true">
+              <path d="M6 2h36l20 20v48a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4z" fill="#fff" stroke="#C7C7CC" stroke-width="1.5"/>
+              <path d="M42 2v16a4 4 0 0 0 4 4h16" fill="#EDEDF0" stroke="#C7C7CC" stroke-width="1.5"/>
+              <rect x="15" y="22" width="30" height="30" rx="8" fill="var(--accent)"/>
+              <rect x="22" y="28" width="16" height="19" rx="2" fill="#fff"/>
+              <path d="M25 33h10M25 37h10M25 41h6" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round"/>
+              <rect id="tagBg" x="13" y="58" width="34" height="11" rx="3" fill="#B0174E"/>
+              <text id="tagText" x="30" y="66.2" font-size="7.5" font-weight="700" fill="#fff" text-anchor="middle" font-family="Inter, system-ui, sans-serif">DEB</text>
+            </svg>
+          </span>
+          <span class="file-name" id="fileName">lumen-notes_2.4.1.deb</span>
+          <span class="file-sub" id="opensWith" hidden>Opens with Installer</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="hint" id="hint"><span>Double-click the package to open it</span></div>
+
+    <!-- Installer window -->
+    <div class="win" id="win" hidden>
+      <div class="win-bar">
+        <div class="win-title" id="winTitle">Lumen Notes</div>
+        <div class="lights" style="position:relative;gap:0">
+          <button type="button" class="close-btn" id="closeBtn" aria-label="Close"><span class="light red"></span></button>
+          <span class="light yellow" aria-hidden="true" style="margin:0 8px 0 2px"></span>
+          <span class="light green" aria-hidden="true"></span>
+        </div>
+      </div>
+      <div class="win-body">
+
+        <div class="view drop-view" id="dropView">
+          <div class="row">
+            <div class="col">
+              <button type="button" id="appIcon" aria-label="Lumen Notes. Drag into Applications to install.">
+                <svg width="112" height="112" aria-hidden="true"><use href="#i-app"/></svg>
+              </button>
+              <span>Lumen Notes</span>
+            </div>
+            <div class="arrow" aria-hidden="true">
+              <svg width="120" height="24" viewBox="0 0 120 24"><path class="dash" d="M4 12H106" stroke="#AEAEB2" stroke-width="2.5" stroke-dasharray="6 6" stroke-linecap="round"/><path d="M100 4l10 8-10 8" fill="none" stroke="#AEAEB2" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="col" id="folder">
+              <div class="folder-tile" id="folderTile">
+                <svg width="96" height="80" viewBox="0 0 96 80" aria-hidden="true">
+                  <path d="M6 14a6 6 0 0 1 6-6h22l8 8h42a6 6 0 0 1 6 6v6H6z" fill="#3D8FE0"/>
+                  <rect x="6" y="22" width="84" height="52" rx="6" fill="#5AACF5"/>
+                  <g fill="#2F7BD0" fill-opacity=".75"><rect x="34" y="34" width="12" height="12" rx="3"/><rect x="50" y="34" width="12" height="12" rx="3"/><rect x="34" y="50" width="12" height="12" rx="3"/><rect x="50" y="50" width="12" height="12" rx="3"/></g>
+                </svg>
+              </div>
+              <span>Applications</span>
+            </div>
+          </div>
+          <div class="drop-text">
+            <p>Drag <strong>Lumen Notes</strong> into Applications</p>
+            <span class="lock-note" id="lockNote">
+              <svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12"><rect x="2" y="5.5" width="8" height="5.5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+              You’ll be asked for your password
+            </span>
+          </div>
+        </div>
+
+        <div class="sheet-dim" id="defaultSheet" hidden>
+          <div class="sheet" role="dialog" aria-labelledby="defTitle">
+            <svg width="52" height="52" aria-hidden="true"><use href="#i-installer"/></svg>
+            <div>
+              <h2 id="defTitle">Open apps you download with Installer?</h2>
+              <p>Any app you download will open here, ready to drag into Applications.</p>
+            </div>
+            <div class="btn-row" style="margin-top:4px">
+              <button type="button" class="btn secondary" id="notNow">Not Now</button>
+              <button type="button" class="btn primary" id="makeDefault">Make Default</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="view install-view" id="installView" hidden>
+          <svg width="72" height="72" aria-hidden="true"><use href="#i-app"/></svg>
+          <h2>Installing Lumen Notes</h2>
+          <div class="progress-wrap">
+            <div class="track" role="progressbar" aria-label="Install progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="bar"><div class="fill" id="fill"></div></div>
+            <div class="progress-meta"><span id="status"></span><span id="timeLeft"></span></div>
+          </div>
+        </div>
+
+        <div class="view done-view" id="doneView" hidden>
+          <div class="check"><svg aria-hidden="true" width="34" height="34" viewBox="0 0 36 36"><path d="M9 18.5l6 6 12-13" fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <h2>Lumen Notes is ready</h2>
+          <p id="doneText"></p>
+          <div style="display:flex;gap:10px;margin-top:10px">
+            <button type="button" class="btn secondary fixed" id="doneBtn">Done</button>
+            <button type="button" class="btn primary fixed" id="openBtn">Open</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Password dialog (illustrative: the real app uses the system's polkit dialog) -->
+    <div class="auth-dim" id="authDim" hidden>
+      <div class="auth" role="dialog" aria-labelledby="authTitle">
+        <div class="auth-inner" id="authInner">
+          <div class="auth-icon">
+            <svg width="64" height="64" aria-hidden="true"><use href="#i-installer"/></svg>
+            <span class="lock-badge" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 14 14"><rect x="2.5" y="6" width="9" height="6.5" rx="1.5" fill="currentColor"/><path d="M4.5 6V4.5a2.5 2.5 0 0 1 5 0V6" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></span>
+          </div>
+          <div>
+            <h2 id="authTitle">Installer wants to add Lumen Notes for everyone on this computer.</h2>
+            <p>Enter your password to allow this.</p>
+          </div>
+          <div class="field">
+            <label for="pw">Password</label>
+            <input id="pw" type="password" autocomplete="current-password">
+            <span class="error" id="pwError" role="alert" hidden></span>
+          </div>
+          <div class="btn-row">
+            <button type="button" class="btn secondary" id="cancelAuth">Cancel</button>
+            <button type="button" class="btn primary" id="allowBtn"><span class="spinner" id="allowSpin" hidden></span><span id="allowLabel">Allow</span></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast" role="status" hidden>
+      <svg width="36" height="36" aria-hidden="true"><use href="#i-installer"/></svg>
+      <div><b>Installer is now your default</b><span>Apps you download will open here.</span></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  const FORMATS = {
+    appimage: {
+      tag: 'APP', tagColor: '#4B48C9', file: 'Lumen_Notes-2.4.1.AppImage', needsAuth: false,
+      steps: ['Copying Lumen Notes', 'Adding it to your apps'],
+      doneText: 'You’ll find it with your other apps. It was added just for you, so no password was needed.'
+    },
+    deb: {
+      tag: 'DEB', tagColor: '#B0174E', file: 'lumen-notes_2.4.1.deb', needsAuth: true,
+      steps: ['Checking the package', 'Getting a few things it needs', 'Installing Lumen Notes', 'Adding it to your apps'],
+      doneText: 'You’ll find it with your other apps. Everyone on this computer can use it, and it stays up to date with your regular updates.'
+    },
+    rpm: {
+      tag: 'RPM', tagColor: '#1F5FB8', file: 'lumen-notes-2.4.1.rpm', needsAuth: true,
+      steps: ['Checking the package', 'Getting a few things it needs', 'Installing Lumen Notes', 'Adding it to your apps'],
+      doneText: 'You’ll find it with your other apps. Everyone on this computer can use it, and it stays up to date with your regular updates.'
+    }
+  };
+
+  // phases: desktop | askDefault | idle | flying | auth | authing | installing | done
+  const state = {
+    format: 'deb', phase: 'desktop', isDefault: false, selected: false,
+    progress: 0, dragging: false, dx: 0, dy: 0, hover: false, launched: false, toast: false, error: ''
+  };
+
+  const $ = (id) => document.getElementById(id);
+  let timers = [], ticker = null, toastTimer = null, lastClick = 0, origin = null, scale = 1;
+
+  const later = (fn, ms) => timers.push(setTimeout(fn, ms));
+  function clearAll() {
+    timers.forEach(clearTimeout); timers = [];
+    if (ticker) { clearInterval(ticker); ticker = null; }
+  }
+  function set(patch) { Object.assign(state, patch); render(); }
+  const fresh = () => ({ progress: 0, dragging: false, dx: 0, dy: 0, hover: false, launched: false, error: '' });
+
+  // ---------- actions ----------
+  function openFile() {
+    if (state.phase !== 'desktop') return;
+    set({ ...fresh(), selected: false, phase: state.isDefault ? 'idle' : 'askDefault' });
+  }
+  function closeInstaller() { clearAll(); set({ ...fresh(), phase: 'desktop', selected: false }); }
+  function makeDefault() {
+    set({ isDefault: true, phase: 'idle', toast: true });
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => set({ toast: false }), 3600);
+  }
+  function drop() {
+    if (state.phase !== 'idle') return;
+    const needsAuth = FORMATS[state.format].needsAuth;
+    set({ phase: 'flying', hover: false, dragging: false });
+    later(() => {
+      if (needsAuth) { set({ phase: 'auth', error: '' }); $('pw').value = ''; setTimeout(() => $('pw').focus(), 50); }
+      else beginCopy();
+    }, 560);
+  }
+  function cancelAuth() { clearAll(); $('pw').value = ''; set({ ...fresh(), phase: 'idle' }); }
+  function authenticate() {
+    if (state.phase !== 'auth') return;
+    if (!$('pw').value) {
+      set({ error: 'Enter your password to continue.' });
+      const el = $('authInner'); el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake');
+      return;
+    }
+    set({ phase: 'authing', error: '' });
+    later(beginCopy, 950);
+  }
+  function beginCopy() {
+    $('pw').value = '';
+    set({ phase: 'installing', progress: 0 });
+    let tick = 0;
+    ticker = setInterval(() => {
+      tick += 1;
+      const p = Math.min(100, state.progress + 1.6 + (tick % 4) * 0.8);
+      set({ progress: p });
+      if (p >= 100) { clearInterval(ticker); ticker = null; later(() => set({ phase: 'done' }), 500); }
+    }, 110);
+  }
+
+  // ---------- render ----------
+  function render() {
+    const s = state, f = FORMATS[s.format], ph = s.phase;
+    const flown = ph === 'flying' || ph === 'auth' || ph === 'authing';
+    const open = ph !== 'desktop';
+
+    document.querySelectorAll('.seg button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.format === s.format)));
+    $('activeApp').textContent = open ? 'Installer' : 'Files';
+
+    $('tagBg').setAttribute('fill', f.tagColor);
+    $('tagText').textContent = f.tag;
+    $('fileName').textContent = f.file;
+    $('file').classList.toggle('selected', s.selected);
+    $('file').setAttribute('aria-label', f.file + ', app package. Double-click to open.');
+    $('opensWith').hidden = !s.isDefault;
+    $('hint').hidden = open;
+
+    $('win').hidden = !open;
+    $('winTitle').textContent = ph === 'installing' ? 'Installing Lumen Notes' : 'Lumen Notes';
+    $('dropView').hidden = !(ph === 'askDefault' || ph === 'idle' || flown);
+    $('defaultSheet').hidden = ph !== 'askDefault';
+    $('installView').hidden = ph !== 'installing';
+    $('doneView').hidden = ph !== 'done';
+    $('lockNote').hidden = !f.needsAuth;
+
+    const icon = $('appIcon');
+    icon.classList.toggle('dragging', s.dragging);
+    icon.classList.toggle('flown', flown);
+    icon.style.transform = flown ? '' : (s.dragging ? `translate(${s.dx}px, ${s.dy}px) scale(1.06)` : 'translate(0px, 0px) scale(1)');
+    $('folderTile').classList.toggle('hover', s.hover);
+    $('folderTile').classList.toggle('gulp', ph === 'flying');
+
+    $('authDim').hidden = !(ph === 'auth' || ph === 'authing');
+    const authing = ph === 'authing';
+    $('pw').disabled = authing; $('cancelAuth').disabled = authing; $('allowBtn').disabled = authing;
+    $('allowSpin').hidden = !authing;
+    $('allowLabel').textContent = authing ? 'Checking…' : 'Allow';
+    $('pw').classList.toggle('invalid', !!s.error);
+    $('pwError').hidden = !s.error; $('pwError').textContent = s.error;
+
+    const pct = Math.round(s.progress);
+    const n = f.steps.length, cur = Math.min(n - 1, Math.floor((s.progress / 100) * n));
+    const secs = Math.ceil((100 - s.progress) / 25.5);
+    $('fill').style.width = pct + '%';
+    $('bar').setAttribute('aria-valuenow', String(pct));
+    $('status').textContent = s.progress >= 100 ? 'Finishing up…' : f.steps[cur] + '…';
+    $('timeLeft').textContent = s.progress >= 100 ? '' : (secs <= 1 ? 'Less than a second left' : `About ${secs} seconds left`);
+
+    $('doneText').textContent = f.doneText;
+    $('openBtn').textContent = s.launched ? 'Opening…' : 'Open';
+    $('toast').hidden = !s.toast;
+  }
+
+  // ---------- events ----------
+  document.querySelectorAll('.seg button').forEach((b) => b.addEventListener('click', () => {
+    clearAll(); $('pw').value = '';
+    set({ ...fresh(), format: b.dataset.format, phase: 'desktop', selected: false });
+  }));
+
+  $('file').addEventListener('click', () => {
+    const now = Date.now();
+    if (state.selected && now - lastClick < 500) openFile(); else set({ selected: true });
+    lastClick = now;
+  });
+  $('file').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); openFile(); } });
+
+  $('closeBtn').addEventListener('click', closeInstaller);
+  $('doneBtn').addEventListener('click', closeInstaller);
+  $('openBtn').addEventListener('click', () => { if (state.launched) return; set({ launched: true }); later(closeInstaller, 1100); });
+  $('notNow').addEventListener('click', () => set({ phase: 'idle' }));
+  $('makeDefault').addEventListener('click', makeDefault);
+
+  // Drag with pointer events (mouse + touch)
+  const icon = $('appIcon');
+  icon.addEventListener('pointerdown', (e) => {
+    if (state.phase !== 'idle') return;
+    scale = icon.getBoundingClientRect().width / 112 || 1;
+    origin = { x: e.clientX, y: e.clientY };
+    try { icon.setPointerCapture(e.pointerId); } catch (_) {}
+    set({ dragging: true, dx: 0, dy: 0 });
+  });
+  icon.addEventListener('pointermove', (e) => {
+    if (!state.dragging) return;
+    const r = $('folder').getBoundingClientRect();
+    const hover = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+    set({ dx: (e.clientX - origin.x) / scale, dy: (e.clientY - origin.y) / scale, hover });
+  });
+  icon.addEventListener('pointerup', () => {
+    if (!state.dragging) return;
+    if (state.hover) { set({ dragging: false, hover: false }); drop(); }
+    else set({ dragging: false, dx: 0, dy: 0, hover: false });
+  });
+  icon.addEventListener('pointercancel', () => set({ dragging: false, dx: 0, dy: 0, hover: false }));
+  icon.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); drop(); } });
+
+  $('pw').addEventListener('input', () => { if (state.error) set({ error: '' }); });
+  $('pw').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') authenticate();
+    if (e.key === 'Escape') cancelAuth();
+  });
+  $('allowBtn').addEventListener('click', authenticate);
+  $('cancelAuth').addEventListener('click', cancelAuth);
+
+  // Scale the 960×700 demo to fit any window
+  function fit() {
+    const k = Math.min(1, window.innerWidth / 960, window.innerHeight / 700);
+    $('fit').style.transform = `translate(-50%, -50%) scale(${k})`;
+  }
+  window.addEventListener('resize', fit);
+  fit();
+  render();
+})();
+</script>
+</body>
+</html>
