@@ -55,6 +55,13 @@ describe('libraryMachine', () => {
     expect(m(confirmingNoPlan, { type: 'PLAN_LOADED', appId: 'a', plan })).toEqual(confirming);
     expect(m(confirmingNoPlan, { type: 'PLAN_LOADED', appId: 'b', plan })).toBe(confirmingNoPlan);
   });
+  it('PLAN_FAILED marks the plan failed and lets CONFIRM go on', () => {
+    const failed = m(confirmingNoPlan, { type: 'PLAN_FAILED', appId: 'a' });
+    expect(failed).toMatchObject({ tag: 'confirming', plan: 'failed' });
+    expect(m(failed, { type: 'CONFIRM' }).tag).toBe('removing');
+    expect(m(confirmingNoPlan, { type: 'PLAN_FAILED', appId: 'b' })).toBe(confirmingNoPlan);
+    expect(m(listing, { type: 'PLAN_FAILED', appId: 'a' })).toBe(listing);
+  });
   it('PLAN_LOADED outside confirming is ignored', () => {
     const ev = { type: 'PLAN_LOADED', appId: 'a', plan } as const;
     expect(m(listing, ev)).toBe(listing);

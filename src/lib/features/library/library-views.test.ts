@@ -42,7 +42,7 @@ describe('AppTile', () => {
   it('shows the name; double click and Enter open the app', async () => {
     const p = tileProps();
     render(AppTile, p);
-    const tile = screen.getByRole('button', { name: /App a/ });
+    const tile = screen.getByRole('button', { name: 'App a' });
     await fireEvent.dblClick(tile);
     await fireEvent.keyDown(tile, { key: 'Enter' });
     expect(p.onlaunch).toHaveBeenCalledTimes(2);
@@ -50,13 +50,13 @@ describe('AppTile', () => {
   it('does not launch an app that cannot launch', async () => {
     const p = tileProps({ app: mk('a', 'appImage', false) });
     render(AppTile, p);
-    await fireEvent.dblClick(screen.getByRole('button', { name: /App a/ }));
+    await fireEvent.dblClick(screen.getByRole('button', { name: 'App a' }));
     expect(p.onlaunch).not.toHaveBeenCalled();
   });
   it('Delete asks to trash; right click and the menu key open the menu', async () => {
     const p = tileProps();
     render(AppTile, p);
-    const tile = screen.getByRole('button', { name: /App a/ });
+    const tile = screen.getByRole('button', { name: 'App a' });
     await fireEvent.keyDown(tile, { key: 'Delete' });
     expect(p.ontrash).toHaveBeenCalledWith('a');
     await fireEvent.contextMenu(tile);
@@ -81,10 +81,19 @@ describe('AppTile', () => {
     await fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
     expect(p.onmenu).toHaveBeenCalledWith(null);
   });
+  it('a visible More button opens and closes the menu', async () => {
+    const p = tileProps();
+    const { rerender } = render(AppTile, p);
+    await fireEvent.click(screen.getByRole('button', { name: 'More options for App a' }));
+    expect(p.onmenu).toHaveBeenCalledWith('a');
+    await rerender({ ...p, menuOpen: true });
+    await fireEvent.click(screen.getByRole('button', { name: 'More options for App a' }));
+    expect(p.onmenu).toHaveBeenLastCalledWith(null);
+  });
   it('a busy tile ignores input', async () => {
     const p = tileProps({ busy: true });
     render(AppTile, p);
-    const tile = screen.getByRole('button', { name: /App a/ });
+    const tile = screen.getByRole('button', { name: 'App a' });
     expect(tile).toBeDisabled();
     await fireEvent.keyDown(tile, { key: 'Delete' });
     expect(p.ontrash).not.toHaveBeenCalled();
@@ -95,7 +104,7 @@ describe('AppGrid', () => {
   const apps = [mk('a'), mk('b'), mk('c', 'systemPackage')];
   it('has one tab stop and arrow keys move focus', async () => {
     render(AppGrid, { apps, onlaunch: vi.fn(), ontrash: vi.fn() });
-    const tiles = screen.getAllByRole('button');
+    const tiles = screen.getAllByRole('button', { name: /^App \w$/ });
     expect(tiles.filter((t) => t.tabIndex === 0)).toHaveLength(1);
     tiles[0]!.focus();
     await fireEvent.keyDown(tiles[0]!, { key: 'ArrowRight' });
@@ -112,15 +121,15 @@ describe('AppGrid', () => {
   it('labels the trash action by app kind in the menu', async () => {
     const ontrash = vi.fn();
     render(AppGrid, { apps, onlaunch: vi.fn(), ontrash });
-    const tiles = screen.getAllByRole('button');
+    const tiles = screen.getAllByRole('button', { name: /^App \w$/ });
     await fireEvent.contextMenu(tiles[2]!);
     await fireEvent.click(await screen.findByRole('menuitem', { name: 'Remove' }));
     expect(ontrash).toHaveBeenCalledWith('c');
   });
   it('dims the tile being removed', () => {
     render(AppGrid, { apps, removingId: 'b', onlaunch: vi.fn(), ontrash: vi.fn() });
-    expect(screen.getByRole('button', { name: /App b/ })).toBeDisabled();
-    expect(screen.getByRole('button', { name: /App a/ })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'App b' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'App a' })).toBeEnabled();
   });
 });
 

@@ -111,6 +111,20 @@
     <span class="name">{app.displayName}</span>
   </button>
 
+  <button
+    class="more"
+    type="button"
+    aria-haspopup="menu"
+    aria-expanded={menuOpen}
+    aria-label={t('library.more', { app: app.displayName })}
+    disabled={busy}
+    tabindex={focusable ? 0 : -1}
+    onpointerdown={(e) => e.stopPropagation()}
+    onclick={() => onmenu(menuOpen ? null : app.id)}
+  >
+    <span aria-hidden="true">⋯</span>
+  </button>
+
   {#if menuOpen}
     <div
       class="menu"
@@ -181,6 +195,32 @@
     line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow-wrap: anywhere;
+  }
+  .more {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--fill-secondary);
+    color: var(--label-secondary);
+    line-height: 1;
+  }
+  /* The visible circle is small; the touch target is 44 px. */
+  .more::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+  }
+  .more:hover,
+  .more:focus-visible {
+    background: var(--accent);
+    color: var(--on-accent);
+    outline: none;
   }
   .menu {
     position: absolute;

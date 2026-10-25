@@ -9,8 +9,13 @@ export type LibraryState =
   | { tag: 'loading' }
   | { tag: 'empty'; notice: LibraryNotice }
   | { tag: 'listing'; apps: InstalledApp[]; notice: LibraryNotice }
-  /** `plan` is null until the gateway says what removal will touch. CONFIRM waits for it. */
-  | { tag: 'confirming'; apps: InstalledApp[]; app: InstalledApp; plan: UninstallPlan | null }
+  /** `plan` is null until the gateway answers; 'failed' = it could not. CONFIRM waits for either. */
+  | {
+      tag: 'confirming';
+      apps: InstalledApp[];
+      app: InstalledApp;
+      plan: UninstallPlan | 'failed' | null;
+    }
   | { tag: 'removing'; apps: InstalledApp[]; app: InstalledApp };
 
 export type LibraryEvent =
@@ -18,6 +23,7 @@ export type LibraryEvent =
   | { type: 'LOAD_FAILED'; error: CommandError }
   | { type: 'TRASH'; appId: string }
   | { type: 'PLAN_LOADED'; appId: string; plan: UninstallPlan }
+  | { type: 'PLAN_FAILED'; appId: string }
   | { type: 'CANCEL' }
   | { type: 'CONFIRM' }
   | { type: 'UNINSTALL_DONE'; outcome: UninstallOutcome }
@@ -60,6 +66,9 @@ export function libraryMachine(state: LibraryState, event: LibraryEvent): Librar
       if (event.type === 'CANCEL') return listOf(state.apps);
       if (event.type === 'PLAN_LOADED' && event.appId === state.app.id) {
         return { ...state, plan: event.plan };
+      }
+      if (event.type === 'PLAN_FAILED' && event.appId === state.app.id) {
+        return { ...state, plan: 'failed' };
       }
       if (event.type === 'CONFIRM' && state.plan) {
         return { tag: 'removing', apps: state.apps, app: state.app };
