@@ -78,7 +78,10 @@ describe('installerMachine · inspection', () => {
     expect(m(initialInstallerState, { type: 'OPEN', path: '/a.rpm' })).toEqual(inspecting);
   });
   it('inspecting + INSPECTED(ok) -> ready', () => {
-    expect(m(inspecting, { type: 'INSPECTED', preview: P })).toEqual(ready);
+    expect(m(inspecting, { type: 'INSPECTED', preview: P })).toEqual({
+      ...ready,
+      source: inspecting.path
+    });
   });
   it.each([
     { kind: 'wrongFamily', madeFor: 'debBased' },
@@ -313,5 +316,50 @@ describe('installerMachine · invariants', () => {
     const copy = structuredClone(s);
     m(s, prog('downloading', 80));
     expect(s).toEqual(copy);
+  });
+});
+
+describe('installerMachine · no double opens', () => {
+  const run = (s: InstallerState, ...es: Parameters<typeof m>[1][]) => es.reduce(m, s);
+  const fromFile = run(inspecting, { type: 'INSPECTED', preview: P });
+  const queueOf = (s: InstallerState) => (s.tag === 'idle' ? [] : s.queued);
+
+  it('the source file is kept through drag, install and outcome', () => {
+    const s = run(fromFile, { type: 'KEY_INSTALL' }, prog('downloading', 5));
+    expect(s).toMatchObject({ tag: 'installing', source: '/a.rpm' });
+    const done = m(s, { type: 'FINISHED', outcome: { kind: 'cancelled' } });
+    expect(done).toMatchObject({ tag: 'ready', source: '/a.rpm' });
+  });
+  it.each(['dragging', 'starting', 'awaitingPermission', 'installing'] as const)(
+    'OPEN of the file on screen or an already queued file does not queue (%s)',
+    (tag) => {
+      const busy =
+        tag === 'dragging'
+          ? m(fromFile, { type: 'DRAG_START' })
+          : tag === 'starting'
+            ? m(fromFile, { type: 'KEY_INSTALL' })
+            : tag === 'awaitingPermission'
+              ? run(fromFile, { type: 'KEY_INSTALL' }, prog('waitingForPermission', null))
+              : run(fromFile, { type: 'KEY_INSTALL' }, prog('installing', 5));
+      expect(busy.tag).toBe(tag);
+      const s = run(
+        busy,
+        { type: 'OPEN', path: '/a.rpm' },
+        { type: 'OPEN', path: '/b.rpm' },
+        { type: 'OPEN', path: '/b.rpm' }
+      );
+      expect(queueOf(s)).toEqual(['/b.rpm']);
+    }
+  );
+  it('opening a queued file directly takes it out of the queue', () => {
+    const s = run(
+      fromFile,
+      { type: 'KEY_INSTALL' },
+      prog('installing', 5),
+      { type: 'OPEN', path: '/b.rpm' },
+      { type: 'FINISHED', outcome: { kind: 'failed', code: 'offline', detail: null } },
+      { type: 'OPEN', path: '/b.rpm' }
+    );
+    expect(s).toEqual({ tag: 'inspecting', path: '/b.rpm', queued: [] });
   });
 });
