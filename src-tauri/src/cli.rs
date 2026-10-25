@@ -7,6 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::error::{CommandError, ErrorCode};
+use crate::events::OpenFilePayload;
 
 /// Largest package we accept: 8 GiB.
 pub const MAX_PACKAGE_BYTES: u64 = 8 * 1024 * 1024 * 1024;
@@ -17,6 +18,29 @@ pub fn file_from_argv(argv: &[String]) -> Option<PathBuf> {
         .skip(1)
         .find(|arg| !arg.starts_with('-'))
         .map(PathBuf::from)
+}
+
+/// Turn argv into an absolute path. Relative paths resolve against `cwd`
+/// (the cwd of the process that was started, which differs for a forwarded
+/// second launch). A path that cannot be canonicalised stays absolute but
+/// unresolved, so `open_package` reports `notFound` instead of the file
+/// silently vanishing.
+pub fn launch_path_from_argv(argv: &[String], cwd: &Path) -> Option<PathBuf> {
+    let raw = file_from_argv(argv)?;
+    let absolute = if raw.is_absolute() {
+        raw
+    } else {
+        cwd.join(raw)
+    };
+    Some(absolute.canonicalize().unwrap_or(absolute))
+}
+
+/// What the single-instance callback should do with a second launch's argv.
+/// `None` means "just focus the window".
+pub fn open_file_payload(argv: &[String], cwd: &Path) -> Option<OpenFilePayload> {
+    launch_path_from_argv(argv, cwd).map(|p| OpenFilePayload {
+        path: p.to_string_lossy().into_owned(),
+    })
 }
 
 /// Canonicalise, require a regular file of at most 8 GiB, and refuse `/proc` and `/dev`.
@@ -59,6 +83,31 @@ mod tests {
             Some(PathBuf::from("/x/a.rpm"))
         );
         assert_eq!(file_from_argv(&args(&["installer"])), None);
+    }
+
+    #[test]
+    fn launch_path_is_canonical_and_absolute() {
+        let dir = std::env::temp_dir().join("installer-cli-launch");
+        std::fs::create_dir_all(dir.join("sub")).unwrap();
+        std::fs::write(dir.join("a.AppImage"), b"x").unwrap();
+        let got = launch_path_from_argv(&args(&["installer", "-x", "sub/../a.AppImage"]), &dir);
+        assert_eq!(got, Some(dir.canonicalize().unwrap().join("a.AppImage")));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn missing_launch_path_stays_absolute() {
+        let got = launch_path_from_argv(&args(&["installer", "nope.rpm"]), Path::new("/zzz"));
+        assert_eq!(got, Some(PathBuf::from("/zzz/nope.rpm")));
+    }
+
+    #[test]
+    fn payload_maps_argv_to_event_and_none_without_file() {
+        let cwd = Path::new("/");
+        assert_eq!(open_file_payload(&args(&["installer"]), cwd), None);
+        assert_eq!(open_file_payload(&args(&["installer", "--new"]), cwd), None);
+        let p = open_file_payload(&args(&["installer", "/nonexistent/b.rpm"]), cwd).unwrap();
+        assert_eq!(p.path, "/nonexistent/b.rpm");
     }
 
     #[test]
