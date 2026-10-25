@@ -199,4 +199,44 @@ describe('InstallerController', () => {
     expect(c.state.tag).toBe('ready');
     expect(await new InstallerController(gw).takeLaunch()).toBe(false);
   });
+
+  it('opening a file while installing queues it and sets a notice', async () => {
+    const { c } = await setup('appimage');
+    c.keyInstall();
+    await settle(300);
+    expect(c.busy).toBe(true);
+    c.open('/other.AppImage');
+    expect(c.queuedCount).toBe(1);
+    expect(c.queueNotice?.title).toBe('Another app is waiting');
+    c.dismissQueueNotice();
+    expect(c.queueNotice).toBeNull();
+  });
+
+  it('opening a file when ready replaces it without a notice', async () => {
+    const { c } = await setup('rpm');
+    c.open('/other.rpm');
+    expect(c.queueNotice).toBeNull();
+  });
+
+  it('user scope never shows the permission shade or permission phase', async () => {
+    const { c } = await setup('appimage');
+    expect(c.needsPassword).toBe(false);
+    c.keyInstall();
+    await settle(2000);
+    expect(c.waitingForPermission).toBe(false);
+    expect(c.phase).not.toBe('waitingForPermission');
+  });
+
+  it('system scope shows the permission shade and password note', async () => {
+    const { c } = await setup('rpm');
+    expect(c.needsPassword).toBe(true);
+    c.keyInstall();
+    await settle(700);
+    expect(c.waitingForPermission).toBe(true);
+  });
+
+  it('exposes the incompatible kind', async () => {
+    const { c } = await setup('already-installed');
+    expect(c.incompatibleKind).toBe('alreadyInstalled.same');
+  });
 });

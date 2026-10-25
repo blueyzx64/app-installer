@@ -73,6 +73,8 @@
   "default.body": "Downloaded apps will open here, ready to drag into Applications.",
   "default.make": "Make Default",
   "default.notNow": "Not Now",
+  "queue.title": "Another app is waiting",
+  "queue.body": "It will open as soon as this one is done.",
   "default.toast": "Installer will now open app files",
 
   "library.title": "Applications",
