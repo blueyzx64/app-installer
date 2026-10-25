@@ -1,0 +1,109 @@
+# DRAFT (W0b). F-62 finishes this in W3: RPM signing, Copr, final smoke tests.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  PNPM_VERSION: '10.28.0'
+
+jobs:
+  build:
+    name: Build RPM and AppImage (fedora:44)
+    runs-on: ubuntu-24.04
+    # Oldest supported release: fixes the glibc and WebKitGTK floor (ADR-0008).
+    container: fedora:44
+    env:
+      # linuxdeploy needs FUSE; containers have none, so unpack and run instead.
+      APPIMAGE_EXTRACT_AND_RUN: '1'
+      NO_STRIP: 'true'
+    steps:
+      - name: Install build tools
+        run: |
+          dnf install -y --setopt=install_weak_deps=False \
+            git gcc gcc-c++ make pkgconf-pkg-config curl file patchelf xdg-utils \
+            rpm-build rpm-sign \
+            nodejs npm \
+            webkit2gtk4.1-devel gtk3-devel dbus-devel openssl-devel librsvg2-devel libsoup3-devel \
+            desktop-file-utils appstream
+      - uses: actions/checkout@v4.2.2
+      - name: Check tag matches Cargo version
+        run: |
+          version=$(sed -n 's/^version *= *"\(.*\)"/\1/p' src-tauri/Cargo.toml | head -n1)
+          test "v${version}" = "${GITHUB_REF_NAME}" || { echo "tag ${GITHUB_REF_NAME} != Cargo version v${version}"; exit 1; }
+      - name: Install pnpm
+        run: npm install --global pnpm@${PNPM_VERSION}
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - uses: Swatinem/rust-cache@v2.7.8
+        with:
+          workspaces: src-tauri
+      - run: pnpm install --frozen-lockfile
+      - name: Build bundles
+        run: pnpm tauri build --bundles rpm,appimage
+      - name: Validate metainfo
+        run: |
+          appstreamcli validate --pedantic src-tauri/linux/io.github.blueyzx64.Installer.metainfo.xml
+      - name: Inspect RPM
+        run: |
+          rpm=$(ls src-tauri/target/release/bundle/rpm/*.rpm)
+          rpm -qlp "$rpm"
+          rpm -qRp "$rpm"
+          rpm -qRp "$rpm" | grep -q PackageKit
+          rpm -qlp "$rpm" | grep -q '\.desktop$'
+          rpm -qlp "$rpm" | grep -q 'metainfo\.xml$'
+      # F-62 (W3): sign with rpmsign --addsign using a GPG key from secrets.
+      - uses: actions/upload-artifact@v4.6.2
+        with:
+          name: bundles
+          if-no-files-found: error
+          path: |
+            src-tauri/target/release/bundle/rpm/*.rpm
+            src-tauri/target/release/bundle/appimage/*.AppImage
+
+  smoke:
+    name: Install RPM on fedora:45
+    needs: build
+    runs-on: ubuntu-24.04
+    container: fedora:45
+    steps:
+      - uses: actions/download-artifact@v4.3.0
+        with:
+          name: bundles
+          path: bundles
+      - name: Install the RPM
+        run: dnf install -y ./bundles/rpm/*.rpm desktop-file-utils
+      - name: Check the installed files
+        run: |
+          test -x /usr/bin/installer
+          desktop=$(rpm -ql installer | grep '\.desktop$' | head -n1)
+          desktop-file-validate "$desktop"
+          grep -q '^MimeType=.*application/x-rpm' "$desktop"
+          grep -Eq '^Exec=.* %f$' "$desktop"
+
+  publish:
+    name: Draft GitHub Release
+    needs: [build, smoke]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4.3.0
+        with:
+          name: bundles
+          path: bundles
+      - uses: softprops/action-gh-release@v2.2.2
+        with:
+          draft: true
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            bundles/rpm/*.rpm
+            bundles/appimage/*.AppImage

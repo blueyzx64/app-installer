@@ -11,7 +11,8 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "lint": "prettier --check . && eslint .",
     "format": "prettier --write .",
-    "test": "vitest run",
+    "lint:copy": "node scripts/lint-copy.mjs",
+    "test": "vitest run && node --test \"scripts/*.test.mjs\"",
     "tauri": "tauri",
     "bindings": "cd src-tauri && cargo run --bin export-bindings"
   },
