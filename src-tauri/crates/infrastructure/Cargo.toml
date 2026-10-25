@@ -9,3 +9,10 @@ description = "Adapters that implement the application ports (PackageKit, AppIma
 installer-domain.workspace = true
 installer-application.workspace = true
 # Lanes B and C add zbus, backhand, rpm, gio, ashpd, tokio, serde_json here.
+# lane S7: appearance adapter
+ashpd = "0.12" # lane S7
+gio = "0.18" # lane S7
+glib = "0.18" # lane S7
+futures-util = { version = "0.3", default-features = false } # lane S7
+tokio = { workspace = true, features = ["rt", "macros", "time", "sync"] } # lane S7
+tracing.workspace = true # lane S7
