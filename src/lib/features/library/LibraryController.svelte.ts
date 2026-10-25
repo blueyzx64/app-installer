@@ -43,7 +43,9 @@ export class LibraryController {
     const s = this.state;
     if (s.tag !== 'confirming') return null;
     const c = trashCopy(s.app);
-    const extras = s.plan ? extrasCopy(s.app.displayName, s.plan.alsoRemoves) : null;
+    const extras = s.plan
+      ? extrasCopy(s.app.displayName, s.plan === 'failed' ? 'unknown' : s.plan.alsoRemoves)
+      : null;
     return {
       app: s.app,
       title: text(c.title),
@@ -86,14 +88,13 @@ export class LibraryController {
     this.#dispatch({ type: 'TRASH', appId });
     const s = this.state;
     if (s.tag !== 'confirming' || s.app.id !== appId) return;
-    let plan: UninstallPlan;
     try {
-      plan = await this.#gw.library.uninstallPlan(appId);
+      const plan: UninstallPlan = await this.#gw.library.uninstallPlan(appId);
+      this.#dispatch({ type: 'PLAN_LOADED', appId, plan });
     } catch {
-      // No plan is not a reason to block removal. Fall back to the plain case.
-      plan = { alsoRemoves: 0, needsPermission: s.app.source === 'systemPackage' };
+      // Not knowing is not zero: the alert warns generically and the person may still go on.
+      this.#dispatch({ type: 'PLAN_FAILED', appId });
     }
-    this.#dispatch({ type: 'PLAN_LOADED', appId, plan });
   }
 
   cancelTrash(): void {
@@ -102,7 +103,7 @@ export class LibraryController {
 
   async confirmTrash(): Promise<void> {
     const s = this.state;
-    if (s.tag !== 'confirming') return;
+    if (s.tag !== 'confirming' || s.plan === null) return; // wait for the plan
     const app = s.app;
     this.removalAskingPermission = false;
     this.#dispatch({ type: 'CONFIRM' });

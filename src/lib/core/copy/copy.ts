@@ -228,7 +228,8 @@ export interface TrashCopy {
 }
 
 /** Second line of the alert. null = nothing else goes with the app. Plural: 1 item, N items. */
-export function extrasCopy(app: string, alsoRemoves: number): Msg | null {
+export function extrasCopy(app: string, alsoRemoves: number | 'unknown'): Msg | null {
+  if (alsoRemoves === 'unknown') return { key: 'trash.body.extras.unknown', params: { app } };
   if (alsoRemoves <= 0) return null;
   return alsoRemoves === 1
     ? { key: 'trash.body.extras.one', params: { app } }

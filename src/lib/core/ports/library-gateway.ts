@@ -2,7 +2,7 @@ import type { InstallEvent, InstalledApp, UninstallOutcome } from '../domain/typ
 
 /**
  * What removing an app will touch (F-42). Contracts v2.
- * TODO(v2:S4): swap for the generated type once bindings carry `UninstallPlan`.
+ * Same shape as the generated `UninstallPlan` in bindings.ts.
  */
 export interface UninstallPlan {
   /** Other items that only this app used and go with it. */

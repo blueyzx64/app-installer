@@ -71,7 +71,18 @@ describe('LibraryController', () => {
     gw.library.uninstallPlan = () => Promise.reject({ code: 'unknown', detail: null });
     await c.requestTrash('orbit-player');
     expect(c.confirm?.ready).toBe(true);
-    expect(c.confirm?.body).toBe('You’ll be asked for your password.');
+    expect(c.confirm?.body).toBe(
+      'You’ll be asked for your password. This may also remove other items that only Orbit Player used.'
+    );
+  });
+  it('confirm before the plan arrives does nothing', async () => {
+    const { c, gw } = await setup('rpm');
+    gw.library.uninstallPlan = () => new Promise(() => {});
+    const spy = vi.spyOn(gw.library, 'uninstall');
+    void c.requestTrash('orbit-player');
+    await c.confirmTrash();
+    expect(spy).not.toHaveBeenCalled();
+    expect(c.state.tag).toBe('confirming');
   });
   it('cancel before the plan arrives drops the late plan', async () => {
     const { c } = await setup('rpm');
