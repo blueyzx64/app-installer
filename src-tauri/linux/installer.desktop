@@ -6,5 +6,5 @@ Exec={{exec}} %f
 Icon={{icon}}
 Terminal=false
 Categories=System;PackageManager;
-MimeType=application/x-rpm;application/x-redhat-package-manager;application/vnd.appimage;application/x-iso9660-appimage;
+MimeType=application/x-rpm;application/vnd.appimage;application/x-iso9660-appimage;
 StartupNotify=true

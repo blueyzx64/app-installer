@@ -2,14 +2,18 @@
 <component type="desktop-application">
   <id>io.github.blueyzx64.Installer</id>
   <metadata_license>CC0-1.0</metadata_license>
-  <!-- TODO(F-62): replace once a project licence is chosen -->
-  <project_license>LicenseRef-proprietary</project_license>
+  <!-- ASK O: license. Placeholder only; the project owner decides. -->
+  <project_license>MIT</project_license>
   <name>Installer</name>
   <summary>Install apps by dragging them to Applications</summary>
   <description>
     <p>Open an app file, drag it to Applications, and you are done. Installer shows what the app is before you install it and asks for your permission only when it is needed.</p>
   </description>
-  <launchable type="desktop-id">io.github.blueyzx64.Installer.desktop</launchable>
+  <url type="homepage">https://github.com/blueyzx64/installer</url>
+  <developer id="io.github.blueyzx64">
+    <name>Installer contributors</name>
+  </developer>
+  <launchable type="desktop-id">Installer.desktop</launchable>
   <provides>
     <binary>installer</binary>
   </provides>
