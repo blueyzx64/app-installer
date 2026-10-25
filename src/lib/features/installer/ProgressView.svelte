@@ -1,5 +1,6 @@
 <script lang="ts">
   import AppIcon from '$lib/ui/AppIcon.svelte';
+  import Button from '$lib/ui/Button.svelte';
   import ProgressBar from '$lib/ui/ProgressBar.svelte';
   import { t } from '$lib/i18n';
 
@@ -11,9 +12,20 @@
     percent: number | null;
     phaseText: string;
     etaText?: string;
+    /** Show Cancel (controller: canCancel). */
+    canCancel?: boolean;
+    oncancel?: () => void;
   }
 
-  let { appName, iconUrl = null, percent, phaseText, etaText = '' }: Props = $props();
+  let {
+    appName,
+    iconUrl = null,
+    percent,
+    phaseText,
+    etaText = '',
+    canCancel = false,
+    oncancel
+  }: Props = $props();
 </script>
 
 <div class="view">
@@ -26,6 +38,9 @@
       <span class="eta tabular">{etaText}</span>
     </div>
   </div>
+  {#if canCancel && oncancel}
+    <Button onclick={oncancel}>{t('action.cancel')}</Button>
+  {/if}
 </div>
 
 <style>
@@ -45,7 +60,7 @@
     font-weight: 700;
   }
   .wrap {
-    width: 360px;
+    width: var(--w-progress);
     max-width: 100%;
     display: flex;
     flex-direction: column;

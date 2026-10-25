@@ -57,22 +57,22 @@
   /* type */
   --font: Inter, 'Adwaita Sans', Cantarell, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --text-scale: 1;
-  --fs-title-2: calc(19px * var(--text-scale));
-  --lh-title-2: calc(24px * var(--text-scale));
-  --fs-title-3: calc(16px * var(--text-scale));
-  --lh-title-3: calc(21px * var(--text-scale));
-  --fs-headline: calc(13px * var(--text-scale));
-  --lh-headline: calc(17px * var(--text-scale));
-  --fs-body: calc(13px * var(--text-scale));
-  --lh-body: calc(18px * var(--text-scale));
-  --fs-callout: calc(14px * var(--text-scale));
-  --lh-callout: calc(20px * var(--text-scale));
-  --fs-subhead: calc(12.5px * var(--text-scale));
-  --lh-subhead: calc(18px * var(--text-scale));
-  --fs-footnote: calc(12px * var(--text-scale));
-  --lh-footnote: calc(16px * var(--text-scale));
-  --fs-caption: calc(11px * var(--text-scale));
-  --lh-caption: calc(14px * var(--text-scale));
+  --fs-title-2: calc(19px * var(--text-scale, 1));
+  --lh-title-2: calc(24px * var(--text-scale, 1));
+  --fs-title-3: calc(16px * var(--text-scale, 1));
+  --lh-title-3: calc(21px * var(--text-scale, 1));
+  --fs-headline: calc(13px * var(--text-scale, 1));
+  --lh-headline: calc(17px * var(--text-scale, 1));
+  --fs-body: calc(13px * var(--text-scale, 1));
+  --lh-body: calc(18px * var(--text-scale, 1));
+  --fs-callout: calc(14px * var(--text-scale, 1));
+  --lh-callout: calc(20px * var(--text-scale, 1));
+  --fs-subhead: calc(12.5px * var(--text-scale, 1));
+  --lh-subhead: calc(18px * var(--text-scale, 1));
+  --fs-footnote: calc(12px * var(--text-scale, 1));
+  --lh-footnote: calc(16px * var(--text-scale, 1));
+  --fs-caption: calc(11px * var(--text-scale, 1));
+  --lh-caption: calc(14px * var(--text-scale, 1));
 
   /* spacing (4 px grid) */
   --sp-1: 4px;
@@ -98,7 +98,16 @@
   --hit-min: 44px;
   --button-min: 36px;
   --icon-dmg: 112px;
-  --col-dmg: 128px;
+  --col-dmg: calc(128px * var(--text-scale, 1));
+  --w-copy: calc(380px * var(--text-scale, 1));
+  --w-copy-wide: calc(420px * var(--text-scale, 1));
+  --w-progress: calc(360px * var(--text-scale, 1));
+  --w-alert: calc(300px * var(--text-scale, 1));
+  --w-sheet: calc(340px * var(--text-scale, 1));
+  --w-toast: calc(300px * var(--text-scale, 1));
+  --w-button-min: calc(88px * var(--text-scale, 1));
+  --gap-row: 10px;
+  --gap-view: 34px;
 
   /* motion: easing + duration */
   --ease-sheet: cubic-bezier(0.2, 0.9, 0.3, 1);

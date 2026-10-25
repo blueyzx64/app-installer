@@ -96,7 +96,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 34px;
+    gap: var(--gap-view);
   }
   .row {
     display: flex;
@@ -108,7 +108,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 10px;
+    gap: var(--gap-row);
   }
   .label {
     font-size: var(--fs-headline);
@@ -139,7 +139,7 @@
   .lock-note {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--sp-2);
     font-size: var(--fs-footnote);
     line-height: var(--lh-footnote);
     color: var(--label-secondary);
