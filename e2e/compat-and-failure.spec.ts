@@ -1,12 +1,11 @@
 import { expect, test } from '@playwright/test';
 import {
   APP,
-  UI_PENDING,
   alertDialog,
+  closeButton,
   dragIconToFolder,
   icon,
   openScenario,
-  uiWired,
   waitReady
 } from './helpers';
 
@@ -15,7 +14,7 @@ test.describe('incompatible packages (F-03 compat, state machine Incompatible)',
     await openScenario(page, 'incompatible-arch');
     await expect(page.getByText(`${APP} can’t be installed here`)).toBeVisible();
     await expect(page.getByText('different kind of processor')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Close' })).toBeVisible();
+    await expect(closeButton(page)).toBeVisible();
     await expect(page.getByRole('button', { name: 'Open' })).toHaveCount(0);
     await expect(icon(page)).toHaveCount(0);
   });
@@ -28,7 +27,6 @@ test.describe('incompatible packages (F-03 compat, state machine Incompatible)',
   });
 
   test('update: stays installable, folder says Update', async ({ page }) => {
-    test.fixme(!uiWired, UI_PENDING);
     await openScenario(page, 'update');
     await waitReady(page);
     await expect(page.getByText('Update', { exact: true })).toBeVisible();
@@ -41,8 +39,6 @@ test.describe('incompatible packages (F-03 compat, state machine Incompatible)',
 });
 
 test.describe('failures and cancel (system package path on mock)', () => {
-  test.beforeEach(() => test.fixme(!uiWired, UI_PENDING));
-
   test('fail: Details hidden by default, Try Again goes back to Ready', async ({ page }) => {
     await openScenario(page, 'fail-offline');
     await waitReady(page);

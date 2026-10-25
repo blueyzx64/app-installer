@@ -1,6 +1,7 @@
 // Lane Q2 (S9b). Compatibility screens: F-10 F-11 F-12 F-13 F-14 (+ missing runtime). Mock via ?scenario=.
 import { expect, test, type Page } from '@playwright/test';
 import en from '../src/lib/i18n/en.json' with { type: 'json' };
+import { closeButton } from './helpers';
 
 function tx(key: keyof typeof en, vars: Record<string, string | number> = {}): string {
   return String(en[key]).replace(/\{(\w+)\}/g, (_, k: string) => String(vars[k] ?? `{${k}}`));
@@ -24,8 +25,7 @@ async function expectNoInstallUi(page: Page) {
 test('F-10 wrong family (.deb on Fedora): plain sentence, no Applications folder', async ({
   page
 }) => {
-  test.fixme(true, 'waiting mock: no wrong-family scenario in v1 switch (deb scenario is ok)');
-  await page.goto('/?scenario=deb');
+  await page.goto('/?scenario=wrong-family');
   await expect(page.getByText(tx('compat.wrongFamily.debBased.title', { app: APP }))).toBeVisible();
   await expect(page.getByText(tx('compat.wrongFamily.debBased.body'))).toBeVisible();
   await expectNoInstallUi(page);
@@ -35,7 +35,7 @@ test('F-11 wrong architecture: plain explanation, Close only', async ({ page }) 
   await page.goto('/?scenario=incompatible-arch');
   await expect(page.getByText(tx('compat.wrongArch.title', { app: APP }))).toBeVisible();
   await expect(page.getByText(tx('compat.wrongArch.body'))).toBeVisible();
-  await expect(page.getByRole('button', { name: tx('action.close'), exact: true })).toBeVisible();
+  await expect(closeButton(page)).toBeVisible();
   await expect(page.getByRole('button', { name: tx('action.open'), exact: true })).toHaveCount(0);
   await expectNoInstallUi(page);
   // No technical words on screen.
@@ -49,7 +49,7 @@ test('F-12 already installed (same version) offers Open', async ({ page }) => {
     page.getByText(tx('compat.alreadyInstalled.same.title', { app: APP }))
   ).toBeVisible();
   await expect(page.getByRole('button', { name: tx('action.open'), exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: tx('action.close'), exact: true })).toBeVisible();
+  await expect(closeButton(page)).toBeVisible();
   await expectNoInstallUi(page);
 });
 
@@ -60,7 +60,6 @@ test('F-12 pressing Open launches the app without an error', async ({ page }) =>
 });
 
 test('F-13 newer version on disk: folder says Update, not Applications', async ({ page }) => {
-  test.fixme(true, 'waiting S6: folder label only exists in the real DmgView (placeholder route)');
   await page.goto('/?scenario=update');
   await expect(installTarget(page)).toBeVisible();
   await expect(page.getByText(tx('dmg.folderUpdate'), { exact: true })).toBeVisible();
@@ -79,8 +78,7 @@ test('F-13 Update runs through permission and done like a new install', async ({
 test('F-14 older version than installed: "A newer version is already installed"', async ({
   page
 }) => {
-  test.fixme(true, 'waiting mock: no older-version scenario in v1 switch');
-  await page.goto('/?scenario=older');
+  await page.goto('/?scenario=older-installed');
   await expect(
     page.getByText(tx('compat.alreadyInstalled.older.title', { app: APP }))
   ).toBeVisible();
@@ -96,6 +94,6 @@ test('missing FUSE 2 support: plain message, nothing to drag', async ({ page }) 
 
 test('Close on an incompatible package ends the flow without an error', async ({ page }) => {
   await page.goto('/?scenario=incompatible-arch');
-  await page.getByRole('button', { name: tx('action.close'), exact: true }).click();
+  await closeButton(page).click();
   await expect(page.getByText(/went wrong|error|failed/i)).toHaveCount(0);
 });

@@ -1,18 +1,8 @@
 import { expect, test } from '@playwright/test';
-import {
-  APP,
-  dragIconTo,
-  icon,
-  openScenario,
-  progressbar,
-  UI_PENDING,
-  uiWired,
-  waitReady
-} from './helpers';
+import { APP, dragIconTo, folder, icon, openScenario, progressbar, waitReady } from './helpers';
 
 test.describe('drag outside and keyboard', () => {
   test.beforeEach(async ({ page }) => {
-    test.fixme(!uiWired, UI_PENDING);
     await openScenario(page, 'appimage');
     await waitReady(page);
   });
@@ -56,10 +46,21 @@ test.describe('drag outside and keyboard', () => {
 });
 
 test('reduced motion: spring back is instant (F-20)', async ({ page }) => {
-  test.fixme(!uiWired, UI_PENDING);
-  await page.emulateMedia({ reducedMotion: 'reduce' });
   await openScenario(page, 'appimage');
   await waitReady(page);
+  // The mock appearance does not follow the OS query (UIBUG), so set it the way GNOME would.
+  await page.evaluate(() =>
+    (
+      globalThis as unknown as { __mock: { emitAppearance(a: unknown): void } }
+    ).__mock.emitAppearance({
+      colorScheme: 'light',
+      accent: null,
+      highContrast: false,
+      reducedMotion: true,
+      controls: { side: 'right', buttons: ['close'] }
+    })
+  );
+  await expect(page.locator('html')).toHaveAttribute('data-motion', 'reduce');
   const before = await icon(page).boundingBox();
   await dragIconTo(page, { x: 20, y: 500 });
   const after = await icon(page).boundingBox();
@@ -67,7 +68,26 @@ test('reduced motion: spring back is instant (F-20)', async ({ page }) => {
   expect(Math.abs(after!.y - before!.y)).toBeLessThan(2);
 });
 
-// Pointer events with pointerType touch need CDP touch emulation; component test covers it.
-test.fixme('touch drag installs (F-20)', async () => {
-  // Needs a hasTouch context + CDP Input.dispatchTouchEvent. Do in W2 if component test is not enough.
+test.describe('touch', () => {
+  test.use({ hasTouch: true });
+  test('touch drag installs (F-20)', async ({ page }) => {
+    await openScenario(page, 'appimage');
+    await waitReady(page);
+    const a = (await icon(page).boundingBox())!;
+    const b = (await folder(page).boundingBox())!;
+    const from = { x: a.x + a.width / 2, y: a.y + a.height / 2 };
+    const to = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+    const cdp = await page.context().newCDPSession(page);
+    const touch = (type: string, p?: { x: number; y: number }) =>
+      cdp.send('Input.dispatchTouchEvent', { type, touchPoints: p ? [p] : [] });
+    await touch('touchStart', from);
+    for (let i = 1; i <= 10; i++) {
+      await touch('touchMove', {
+        x: from.x + ((to.x - from.x) * i) / 10,
+        y: from.y + ((to.y - from.y) * i) / 10
+      });
+    }
+    await touch('touchEnd');
+    await expect(progressbar(page)).toBeVisible();
+  });
 });

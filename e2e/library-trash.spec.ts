@@ -1,5 +1,6 @@
 // Lane Q2 (S9b). Library: F-40 empty state, F-41 trash AppImage, F-42 remove system package, F-43 reconcile.
 import { expect, test, type Page } from '@playwright/test';
+import { dismissDefaultPrompt } from './helpers';
 import en from '../src/lib/i18n/en.json' with { type: 'json' };
 
 function tx(key: keyof typeof en, vars: Record<string, string | number> = {}): string {
@@ -127,8 +128,23 @@ test('F-42 a failed removal keeps the app and says so in plain words', async ({ 
 });
 
 test('F-43 apps removed outside the installer disappear on next open', async ({ page }) => {
-  test.fixme(true, 'waiting mock: no hook to remove an app behind the ledger (reconcile)');
   await openLibrary(page);
-  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(tile(page, USER_APP)).toBeVisible();
+  // Remove behind the ledger's back, leave the library and come back (the "next open").
+  await page.evaluate(() => {
+    const m = (
+      globalThis as unknown as {
+        __mock: { removeApp(id: string): void; emitOpenFile(p: string): void };
+      }
+    ).__mock;
+    m.removeApp('pixel-draw');
+    m.emitOpenFile('/home/you/Downloads/Lumen_Notes-2.4.1.AppImage');
+  });
+  await expect(page).toHaveURL(/\/install/);
+  await dismissDefaultPrompt(page, page.getByText('Drag Lumen Notes to Applications'));
+  await page.goBack();
+  await expect(page).toHaveURL(/\/library/);
+  await expect(page.getByRole('heading', { name: tx('library.title') })).toBeVisible();
+  await expect(tile(page, 'Tidy Tasks')).toBeVisible();
   await expect(tile(page, USER_APP)).toHaveCount(0);
 });

@@ -25,19 +25,23 @@ export const folder = (page: Page): Locator => page.getByTestId('folder-tile');
 
 export async function waitReady(page: Page): Promise<void> {
   await dismissDefaultPrompt(page);
-  await expect(icon(page)).toBeVisible();
 }
 
-/** The first-launch "make default" sheet may cover the window. Dismiss it if it shows. */
-export async function dismissDefaultPrompt(page: Page): Promise<void> {
+/**
+ * The first-launch "make default" sheet appears a moment after the icon and then covers the
+ * window (hiding the icon from the a11y tree). Wait for it, dismiss it, and then wait for `ready`.
+ */
+export async function dismissDefaultPrompt(page: Page, ready: Locator = icon(page)): Promise<void> {
   const notNow = page.getByRole('button', { name: 'Not Now' });
+  await ready.or(notNow).first().waitFor({ state: 'attached', timeout: 10_000 });
   try {
-    await notNow.waitFor({ state: 'visible', timeout: 1_500 });
+    await notNow.waitFor({ state: 'visible', timeout: 4_000 });
     await notNow.click();
     await expect(notNow).toBeHidden();
   } catch {
-    /* no prompt */
+    /* no sheet (already default, or the screen has no install UI) */
   }
+  await expect(ready).toBeVisible();
 }
 
 async function center(l: Locator): Promise<{ x: number; y: number }> {
@@ -63,7 +67,6 @@ export async function dragIconToFolder(page: Page, drop = true) {
 export const progressbar = (page: Page) => page.getByRole('progressbar');
 export const alertDialog = (page: Page) => page.getByRole('alertdialog');
 
-/** Flip to true with E2E_UI_WIRED=1 once lanes E/F/G are merged. Then delete the gate. */
-export const uiWired = process.env.E2E_UI_WIRED === '1';
-export const UI_PENDING =
-  'Waits for lanes E/F/G: /install is still a placeholder (no DmgView, alerts or window controls yet)';
+/** The text "Close" button in a view. The title-bar close dot has the same name but no text. */
+export const closeButton = (page: Page): Locator =>
+  page.getByRole('button', { name: 'Close', exact: true }).filter({ hasText: 'Close' });

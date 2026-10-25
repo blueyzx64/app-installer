@@ -1,9 +1,8 @@
 import { expect, test } from '@playwright/test';
-import { APP, UI_PENDING, icon, openScenario, uiWired, waitReady } from './helpers';
+import { APP, closeButton, dragIconToFolder, icon, openScenario, waitReady } from './helpers';
 
 test.describe('launch file (F-01 F-03)', () => {
   test('package passed at start shows name and icon fast @smoke', async ({ page }) => {
-    test.fixme(!uiWired, UI_PENDING);
     await openScenario(page, 'appimage');
     await waitReady(page);
     await expect(page.getByText(APP, { exact: true }).first()).toBeVisible();
@@ -20,19 +19,28 @@ test.describe('launch file (F-01 F-03)', () => {
     // Mock rejects a blank path with corruptFile.
     await page.goto('/?launch=x&file=%20');
     await expect(page.getByText(/damaged or isn’t an app/)).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Close' })).toBeVisible();
+    await expect(closeButton(page)).toBeVisible();
   });
 
-  test.fixme('second open while installing is queued (F-02)', async () => {
-    // Needs a way to emit open-file from the page. Mock has MockControls.emitOpenFile but
-    // nothing exposes it to the page. ASK O: S5 sets window.__mock = gateways.controls in dev.
+  test('second open while installing is queued, not replacing (F-02)', async ({ page }) => {
+    await openScenario(page, 'appimage');
+    await waitReady(page);
+    await dragIconToFolder(page);
+    await expect(page.getByRole('progressbar')).toBeVisible();
+    await page.evaluate(() =>
+      (globalThis as unknown as { __mock: { emitOpenFile(p: string): void } }).__mock.emitOpenFile(
+        '/home/you/Downloads/other-1.0.rpm'
+      )
+    );
+    await expect(page.getByText('Another app is waiting')).toBeVisible();
+    await expect(page.getByText(`${APP} is installed`)).toBeVisible({ timeout: 10_000 });
   });
 });
 
 test.describe('appearance (F-53 F-54)', () => {
-  test('follows prefers-color-scheme @smoke', async ({ page }, info) => {
-    test.fixme(!uiWired, UI_PENDING);
-    await openScenario(page, 'appimage');
+  test('window colours follow the appearance scheme @smoke', async ({ page }, info) => {
+    const scheme = info.project.name === 'dark' ? 'dark' : 'light';
+    await openScenario(page, 'appimage', `&scheme=${scheme}`);
     await waitReady(page);
     const lum = await page.evaluate(() => {
       const m = getComputedStyle(document.body).backgroundColor.match(/\d+(\.\d+)?/g) ?? [];
@@ -45,7 +53,6 @@ test.describe('appearance (F-53 F-54)', () => {
   });
 
   test('default controls: one close button on the right (F-54)', async ({ page }) => {
-    test.fixme(!uiWired, UI_PENDING);
     await openScenario(page, 'appimage');
     await waitReady(page);
     const close = page.getByRole('button', { name: 'Close', exact: true });
@@ -55,12 +62,41 @@ test.describe('appearance (F-53 F-54)', () => {
     await expect(page.getByRole('button', { name: 'Minimize' })).toHaveCount(0);
   });
 
-  test.fixme('left traffic lights for close,minimize,maximize: (F-54)', async () => {
-    // Mock appearance is fixed {side:right, buttons:[close]}. ASK O: add ?buttons=close,minimize,maximize&side=left
-    // to the mock (S5) so this can run. Rust mapping is covered by appearance.rs unit tests (S7).
+  test('left traffic lights for close,minimize,maximize: (F-54)', async ({ page }) => {
+    await openScenario(page, 'appimage', '&side=left&buttons=close,minimize,maximize');
+    await waitReady(page);
+    const close = page.getByRole('button', { name: 'Close', exact: true });
+    const min = page.getByRole('button', { name: 'Minimize' });
+    await expect(close).toBeVisible();
+    await expect(min).toBeVisible();
+    const c = (await close.boundingBox())!;
+    const m = (await min.boundingBox())!;
+    expect(c.x).toBeLessThan(380);
+    expect(c.x).toBeLessThan(m.x);
   });
 
-  test.fixme('live change of scheme/accent/contrast/motion (F-53)', async () => {
-    // Needs MockControls.emitAppearance on window (same hook as F-02). Real portal: HUMAN.
+  test('live change of scheme, contrast and motion (F-53)', async ({ page }) => {
+    await openScenario(page, 'appimage');
+    await waitReady(page);
+    const html = page.locator('html');
+    await expect(html).toHaveAttribute('data-scheme', 'light');
+    const set = (patch: Record<string, unknown>) =>
+      page.evaluate(async (p) => {
+        const m = (globalThis as unknown as { __mock: { emitAppearance(a: unknown): void } })
+          .__mock;
+        m.emitAppearance({
+          colorScheme: 'light',
+          accent: null,
+          highContrast: false,
+          reducedMotion: false,
+          controls: { side: 'right', buttons: ['close'] },
+          ...p
+        });
+      }, patch);
+    await set({ colorScheme: 'dark', highContrast: true, reducedMotion: true, accent: '#ff7800' });
+    await expect(html).toHaveAttribute('data-scheme', 'dark');
+    await expect(html).toHaveAttribute('data-contrast', 'more');
+    await expect(html).toHaveAttribute('data-motion', 'reduce');
+    expect(await html.evaluate((e) => e.style.getPropertyValue('--accent'))).toBe('#ff7800');
   });
 });

@@ -1,6 +1,7 @@
 // Lane Q2 (S9b). rpm install flow: F-23 F-24 F-25 F-26 F-27 F-28. Runs against the mock (pnpm dev).
 import { expect, test, type Page } from '@playwright/test';
 import en from '../src/lib/i18n/en.json' with { type: 'json' };
+import { closeButton, dismissDefaultPrompt } from './helpers';
 
 /** i18n text with {param} filled in, so specs assert on the strings the UI shows. */
 function tx(key: keyof typeof en, vars: Record<string, string | number> = {}): string {
@@ -18,6 +19,7 @@ function installTarget(page: Page) {
 
 async function openScenario(page: Page, scenario: string) {
   await page.goto(`/?scenario=${scenario}`);
+  await dismissDefaultPrompt(page, installTarget(page));
   await expect(installTarget(page)).toBeVisible();
 }
 
@@ -44,10 +46,9 @@ test('F-23 rpm: permission shade, then progress, then done with Open', async ({ 
 });
 
 test('F-23 rpm: dragging the icon onto Applications starts the install', async ({ page }) => {
-  test.fixme(true, 'waiting S6: route wiring of DmgView (placeholder route has no draggable icon)');
   await openScenario(page, 'rpm');
   const icon = installTarget(page);
-  const folder = page.getByText(tx('dmg.folder'), { exact: true });
+  const folder = page.getByTestId('folder-tile');
   const a = (await icon.boundingBox())!;
   const b = (await folder.boundingBox())!;
   await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
@@ -90,9 +91,9 @@ test('F-25 progress uses plain phrases and never names dependency packages', asy
 });
 
 test('F-25 progress bar is indeterminate when the percentage is unknown', async ({ page }) => {
-  test.fixme(true, 'waiting mock: no scripted step with percent=null after the shade');
-  await openScenario(page, 'rpm');
+  await openScenario(page, 'null-percent');
   await keyInstall(page);
+  await expect(page.getByRole('progressbar')).toBeVisible();
   await expect(page.getByRole('progressbar')).not.toHaveAttribute('aria-valuenow', /.+/);
 });
 
@@ -107,7 +108,6 @@ test('F-27 more than 50 MB of extra downloads says so in the progress view', asy
 });
 
 test('F-28 Cancel shows only while the backend allows it', async ({ page }) => {
-  test.fixme(true, 'waiting mock: InstallEvent.progress.allowCancel (contracts v2) not scripted');
   await openScenario(page, 'rpm');
   await keyInstall(page);
   const cancel = page.getByRole('button', { name: tx('action.cancel'), exact: true });
@@ -135,13 +135,12 @@ test('F-26 failure shows a sentence with Try Again and Close', async ({ page }) 
   await keyInstall(page);
   await expect(page.getByText(tx('error.offline', { app: APP }))).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole('button', { name: tx('action.tryAgain') })).toBeVisible();
-  await expect(page.getByRole('button', { name: tx('action.close'), exact: true })).toBeVisible();
+  await expect(closeButton(page)).toBeVisible();
   // Technical text is not shown by default.
   await expect(page.getByText('mock: could not reach the network')).toBeHidden();
 });
 
 test('F-26 Details is a disclosure that reveals the technical text', async ({ page }) => {
-  test.fixme(true, 'waiting S6: ErrorView with Disclosure not wired into the route yet');
   await openScenario(page, 'fail-offline');
   await keyInstall(page);
   const details = page.getByRole('button', { name: tx('details.label') });
