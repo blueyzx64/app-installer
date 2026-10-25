@@ -4,18 +4,32 @@
 use std::path::Path;
 
 use specta_typescript::Typescript;
-use tauri_specta::{Builder, collect_commands};
+use tauri_specta::{Builder, ErrorHandlingMode, collect_commands};
 
-use crate::commands::{install, package};
+use crate::commands::{appearance, defaults, install, library, package};
 
 /// Where the generated file is committed, relative to `src-tauri/`.
 pub const BINDINGS_PATH: &str = "../src/lib/infrastructure/tauri/bindings.ts";
 
 pub fn builder() -> Builder<tauri::Wry> {
-    Builder::<tauri::Wry>::new().commands(collect_commands![
-        package::take_launch_file,
-        install::install,
-    ])
+    Builder::<tauri::Wry>::new()
+        // Commands reject with `CommandError`; wrappers are plain `Promise<T>`.
+        .error_handling(ErrorHandlingMode::Throw)
+        // One TS type per Rust type (no `_Serialize` / `_Deserialize` pairs).
+        .disable_serde_phases()
+        .commands(collect_commands![
+            package::take_launch_file,
+            package::open_package,
+            install::install,
+            install::cancel_install,
+            library::list_installed,
+            library::uninstall,
+            library::launch_app,
+            defaults::default_handler_status,
+            defaults::make_default_handler,
+            defaults::dismiss_default_prompt,
+            appearance::get_appearance,
+        ])
 }
 
 pub fn export(path: impl AsRef<Path>) -> anyhow::Result<()> {
@@ -28,12 +42,45 @@ mod tests {
     use super::*;
 
     #[test]
-    fn export_contains_commands_and_channel() {
-        let dir = std::env::temp_dir().join("installer-bindings-test.ts");
-        export(&dir).unwrap();
-        let ts = std::fs::read_to_string(&dir).unwrap();
-        assert!(ts.contains("takeLaunchFile"));
-        assert!(ts.contains("onEvent: Channel<InstallEventDto"));
-        let _ = std::fs::remove_file(dir);
+    fn export_has_every_command_with_contract_type_names() {
+        let path = std::env::temp_dir().join("installer-bindings-test.ts");
+        export(&path).unwrap();
+        let ts = std::fs::read_to_string(&path).unwrap();
+        let _ = std::fs::remove_file(path);
+        for cmd in [
+            "takeLaunchFile",
+            "openPackage",
+            "install:",
+            "cancelInstall",
+            "listInstalled",
+            "uninstall:",
+            "launchApp",
+            "defaultHandlerStatus",
+            "makeDefaultHandler",
+            "dismissDefaultPrompt",
+            "getAppearance",
+        ] {
+            assert!(ts.contains(cmd), "missing command {cmd}");
+        }
+        for ty in [
+            "PackagePreview",
+            "Compatibility",
+            "InstallPhase",
+            "InstallEvent",
+            "InstallOutcome",
+            "InstalledApp",
+            "ErrorCode",
+            "CommandError",
+            "Appearance",
+            "DefaultStatus",
+            "UninstallOutcome",
+        ] {
+            assert!(
+                ts.contains(&format!("export type {ty} =")),
+                "missing type {ty}"
+            );
+        }
+        assert!(ts.contains("onEvent: Channel<InstallEvent>"));
+        assert!(!ts.contains("_Serialize"));
     }
 }

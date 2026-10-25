@@ -32,6 +32,11 @@ pub fn run() {
         .invoke_handler(specta.invoke_handler())
         .setup(move |app| {
             specta.mount_events(app);
+            let observer =
+                std::sync::Arc::new(events::AppearanceEmitter::new(app.handle().clone()));
+            app.state::<state::AppState>()
+                .watch_appearance
+                .execute(observer);
             Ok(())
         })
         .run(tauri::generate_context!())

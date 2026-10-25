@@ -1764,6 +1764,9 @@ name = "installer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
+ "installer-application",
+ "installer-domain",
  "log",
  "serde",
  "serde_json",

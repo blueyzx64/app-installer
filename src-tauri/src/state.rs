@@ -1,31 +1,44 @@
-//! Shared app state, managed by Tauri.
-//!
-//! Will grow to hold the use cases, the `PreviewRegistry` and active install
-//! handles once `composition.rs` wires the real adapters.
+//! Shared app state, managed by Tauri. Built only by `composition::build_state`.
 
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-#[derive(Default)]
+use crate::composition::{
+    CancelInstallUc, DefaultStatusUc, DismissPromptUc, GetAppearanceUc, InstallPackageUc,
+    LaunchAppUc, ListInstalledUc, MakeDefaultUc, OpenPackageUc, UninstallAppUc, WatchAppearanceUc,
+};
+
 pub struct AppState {
-    launch_file: Mutex<Option<PathBuf>>,
+    pub launch_file: LaunchFile,
+    pub open_package: OpenPackageUc,
+    pub install_package: InstallPackageUc,
+    pub cancel_install: CancelInstallUc,
+    pub list_installed: ListInstalledUc,
+    pub uninstall_app: UninstallAppUc,
+    pub launch_app: LaunchAppUc,
+    pub default_status: DefaultStatusUc,
+    pub make_default: MakeDefaultUc,
+    pub dismiss_prompt: DismissPromptUc,
+    pub get_appearance: GetAppearanceUc,
+    pub watch_appearance: WatchAppearanceUc,
 }
 
-impl AppState {
-    pub fn new(launch_file: Option<PathBuf>) -> Self {
-        Self {
-            launch_file: Mutex::new(launch_file),
-        }
+/// The file from the first launch's argv, handed out once.
+#[derive(Default)]
+pub struct LaunchFile(Mutex<Option<PathBuf>>);
+
+impl LaunchFile {
+    pub fn new(path: Option<PathBuf>) -> Self {
+        Self(Mutex::new(path))
     }
 
-    /// Returns the file from the first launch's argv, once. Later calls give `None`.
-    pub fn take_launch_file(&self) -> Option<PathBuf> {
+    /// Returns the path once. Later calls give `None`.
+    pub fn take(&self) -> Option<PathBuf> {
         // A poisoned lock only means another thread panicked; the data is still valid.
-        let mut guard = self
-            .launch_file
+        self.0
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        guard.take()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take()
     }
 }
 
@@ -35,8 +48,8 @@ mod tests {
 
     #[test]
     fn launch_file_is_taken_once() {
-        let state = AppState::new(Some(PathBuf::from("/tmp/a.rpm")));
-        assert_eq!(state.take_launch_file(), Some(PathBuf::from("/tmp/a.rpm")));
-        assert_eq!(state.take_launch_file(), None);
+        let f = LaunchFile::new(Some(PathBuf::from("/tmp/a.rpm")));
+        assert_eq!(f.take(), Some(PathBuf::from("/tmp/a.rpm")));
+        assert_eq!(f.take(), None);
     }
 }
