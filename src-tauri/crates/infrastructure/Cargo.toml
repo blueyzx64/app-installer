@@ -1,0 +1,11 @@
+[package]
+name = "installer-infrastructure"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Adapters that implement the application ports (PackageKit, AppImage, GIO, ...)."
+
+[dependencies]
+installer-domain = { path = "../domain" }
+installer-application = { path = "../application" }
+# Lanes B and C add zbus, backhand, rpm, gio, ashpd, tokio, serde_json here.
