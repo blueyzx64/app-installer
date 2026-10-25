@@ -32,7 +32,24 @@ pub fn log_dir(env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
 /// Replace every occurrence of `home` in `text` with `~`.
 pub fn redact(text: &str, home: Option<&str>) -> String {
     match home.map(|h| h.trim_end_matches('/')) {
-        Some(h) if !h.is_empty() => text.replace(h, "~"),
+        Some(h) if !h.is_empty() => {
+            let mut out = String::with_capacity(text.len());
+            let mut rest = text;
+            while let Some(i) = rest.find(h) {
+                let (head, tail) = rest.split_at(i);
+                let after = &tail[h.len()..];
+                out.push_str(head);
+                // Only a whole path component counts: `/home/sam`, not `/home/samuel`.
+                if after.is_empty() || after.starts_with('/') {
+                    out.push('~');
+                } else {
+                    out.push_str(h);
+                }
+                rest = after;
+            }
+            out.push_str(rest);
+            out
+        }
         _ => text.to_owned(),
     }
 }
