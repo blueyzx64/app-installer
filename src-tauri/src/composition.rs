@@ -13,20 +13,23 @@ use installer_application::PreviewRegistry;
 use installer_application::ports::Clock;
 use installer_application::testing::{
     FakeAppearance, FakeDefaults, FakeDesktop, FakeFileProbe, FakeHost, FakeInspector,
-    FakeLauncher, FakeLedger, FakeSystemPackages, FakeUserApps,
+    FakeLauncher, FakeLedger, FakeUserApps,
 };
 use installer_application::use_cases::{
     CancelInstall, DismissDefaultPrompt, GetAppearance, GetDefaultHandlerStatus, InstallPackage,
     LaunchApp, ListInstalledApps, MakeDefaultHandler, OpenPackage, UninstallApp, WatchAppearance,
 };
 
+use crate::fallbacks::{InspectorChain, NoInspector, UnavailableSystemPackages};
 use crate::state::{AppState, LaunchFile};
 
 // Port implementations in use. Swap these when a real adapter lands.
 type Probe = FakeFileProbe;
-type Inspector = FakeInspector;
+// One inspector per format, chained. W1: AppImage (S3). W2: add rpm and deb.
+type Inspector = InspectorChain<FakeInspector, NoInspector>;
 type Host = FakeHost;
-type System = FakeSystemPackages;
+// D-020: unavailable stub until PackageKit lands in W2.
+type System = UnavailableSystemPackages;
 type User = FakeUserApps;
 type Desktop = FakeDesktop;
 type Ledger = FakeLedger;
@@ -66,13 +69,13 @@ fn fake_probe() -> Arc<Probe> {
     Arc::new(FakeFileProbe::default())
 }
 fn fake_inspector() -> Arc<Inspector> {
-    Arc::new(FakeInspector::default())
+    Arc::new(InspectorChain::new(FakeInspector::default(), NoInspector))
 }
 fn fake_host() -> Arc<Host> {
     Arc::new(FakeHost::fedora())
 }
 fn fake_system_packages() -> Arc<System> {
-    Arc::new(FakeSystemPackages::default())
+    Arc::new(UnavailableSystemPackages)
 }
 fn fake_user_apps() -> Arc<User> {
     Arc::new(FakeUserApps::default())

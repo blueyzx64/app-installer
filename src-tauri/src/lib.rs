@@ -7,19 +7,22 @@ pub mod composition;
 pub mod dto;
 pub mod error;
 pub mod events;
+pub mod fallbacks;
 pub mod state;
 
 use tauri::Manager;
 
 pub fn run() {
-    let launch_file = cli::file_from_argv(&std::env::args().collect::<Vec<_>>());
+    let launch_file = std::env::current_dir()
+        .ok()
+        .and_then(|cwd| cli::launch_path_from_argv(&std::env::args().collect::<Vec<_>>(), &cwd));
     let specta = bindings::builder();
 
     tauri::Builder::default()
         // Must be registered first (single-instance requirement).
-        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            if let Some(path) = cli::file_from_argv(&argv) {
-                events::emit_open_file(app, &path.to_string_lossy());
+        .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
+            if let Some(payload) = cli::open_file_payload(&argv, std::path::Path::new(&cwd)) {
+                events::emit_open_file(app, &payload.path);
             }
             if let Some(window) = app.get_webview_window("main") {
                 if let Err(err) = window.set_focus() {
