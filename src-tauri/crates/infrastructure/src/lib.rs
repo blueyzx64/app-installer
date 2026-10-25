@@ -30,3 +30,6 @@ pub mod packagekit; // lane S2
 // lane S2c
 #[cfg(feature = "dnf5daemon")]
 pub mod dnf5daemon;
+
+#[cfg(test)]
+mod review_r2; // lane S3 (R2 proof tests)

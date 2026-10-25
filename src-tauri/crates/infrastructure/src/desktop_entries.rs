@@ -79,7 +79,19 @@ pub fn icon_sizes(side: u32) -> Vec<u32> {
 /// Render the `.desktop` file text for an app.
 pub fn render_entry(name: &str, exec_path: &Path, icon_name: &str) -> String {
     let path = exec_path.to_string_lossy();
-    let exec = format!("{} %U", quote_exec_arg(&path));
+    // GIO checks the program named by `Exec` without undoing `%%`, so a path with a literal
+    // `%` would make it reject the entry. Hand such paths to `sh` as an argument instead
+    // (where `%%` is fine), and keep the real path in `TryExec`.
+    let exec = if path.contains('%') {
+        format!(
+            "/bin/sh -c {} {} {} %U",
+            quote_exec_arg("exec \"$@\""),
+            quote_exec_arg("sh"),
+            quote_exec_arg(&path)
+        )
+    } else {
+        format!("{} %U", quote_exec_arg(&path))
+    };
     let mut s = String::from("[Desktop Entry]\nType=Application\nVersion=1.0\n");
     let mut line = |k: &str, v: &str| {
         s.push_str(k);
@@ -249,12 +261,17 @@ pub fn default_data_home() -> Option<PathBuf> {
         .map(|h| PathBuf::from(h).join(".local/share"))
 }
 
+/// Map an I/O failure to an error code. The OS message never reaches the UI; the detail
+/// of `Unknown` carries only the error kind.
 pub(crate) fn io_to_install(e: io::Error) -> InstallError {
+    use io::ErrorKind as K;
     match e.kind() {
-        io::ErrorKind::PermissionDenied => InstallError::PermissionDenied,
-        io::ErrorKind::NotFound => InstallError::NotFound,
-        io::ErrorKind::StorageFull | io::ErrorKind::QuotaExceeded => InstallError::NotEnoughSpace,
-        _ => InstallError::Unknown(e.to_string()),
+        K::PermissionDenied | K::ReadOnlyFilesystem => InstallError::PermissionDenied,
+        K::NotFound => InstallError::NotFound,
+        K::StorageFull | K::QuotaExceeded => InstallError::NotEnoughSpace,
+        // Something (a file, a link to nowhere) sits where our folder should be.
+        K::AlreadyExists | K::NotADirectory | K::IsADirectory => InstallError::Conflicts,
+        kind => InstallError::Unknown(format!("io error: {kind:?}")),
     }
 }
 
@@ -272,11 +289,15 @@ pub(crate) fn write_atomic(path: &Path, bytes: &[u8], mode: u32) -> io::Result<(
         .parent()
         .ok_or_else(|| io::Error::other("no parent dir"))?;
     fs::create_dir_all(dir)?;
+    // Unique per call, so two writers (threads or processes) never share a temp file.
+    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let tmp = dir.join(format!(
-        ".{}.tmp",
+        ".{}.{}.{}.tmp",
         path.file_name()
             .map(|n| n.to_string_lossy())
-            .unwrap_or_default()
+            .unwrap_or_default(),
+        std::process::id(),
+        COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     let result = (|| {
         let mut f = fs::File::create(&tmp)?;
@@ -368,6 +389,47 @@ mod tests {
         let text = render_entry("Evil\nExec=/bin/sh", Path::new("/a/b.AppImage"), "id");
         assert_eq!(text.matches("\nExec=").count(), 1, "{text}");
         assert!(text.contains("Name=Evil\\nExec=/bin/sh\n"));
+    }
+
+    #[test]
+    fn percent_path_goes_through_sh_and_gio_accepts_it() {
+        use gio::prelude::AppInfoExt;
+        let dir = tempfile::tempdir().unwrap();
+        let app = dir.path().join("100%.AppImage");
+        std::fs::write(&app, b"x").unwrap();
+        std::fs::set_permissions(&app, std::os::unix::fs::PermissionsExt::from_mode(0o755))
+            .unwrap();
+        let f = dir.path().join("t.desktop");
+        std::fs::write(&f, render_entry("X", &app, "icon")).unwrap();
+        let info = gio_unix::DesktopAppInfo::from_filename(&f).expect("GIO accepts entry");
+        let cmd = info.commandline().unwrap().to_string_lossy().into_owned();
+        let argv = glib::shell_parse_argv(&cmd).unwrap();
+        let argv: Vec<String> = argv
+            .iter()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(argv[0], "/bin/sh");
+        // GIO turns `%%` into `%` when it launches.
+        let want = app.to_string_lossy().replace('%', "%%");
+        assert!(argv.contains(&want), "{argv:?}");
+        assert_eq!(argv[2], "exec \"$@\"");
+    }
+
+    #[test]
+    fn io_errors_map_to_codes_not_text() {
+        use io::ErrorKind as K;
+        let rows = [
+            (K::PermissionDenied, InstallError::PermissionDenied),
+            (K::NotFound, InstallError::NotFound),
+            (K::StorageFull, InstallError::NotEnoughSpace),
+            (K::AlreadyExists, InstallError::Conflicts),
+            (K::NotADirectory, InstallError::Conflicts),
+        ];
+        for (kind, want) in rows {
+            assert_eq!(io_to_install(io::Error::from(kind)), want, "{kind:?}");
+        }
+        let weird = io_to_install(io::Error::other("secret /home/u path"));
+        assert!(matches!(&weird, InstallError::Unknown(d) if !d.contains("secret")));
     }
 
     #[test]

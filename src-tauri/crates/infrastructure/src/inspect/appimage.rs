@@ -3,11 +3,10 @@
 //! Reads the ELF header to find the SquashFS image, opens it with `backhand`, and pulls
 //! the root `*.desktop` and the icon out. The file is only ever read, never run.
 //!
-//! `needs_fuse2` heuristic: the runtime (bytes before the SquashFS image) needs
-//! `libfuse.so.2` when it is dynamically linked (has a `PT_INTERP` program header) and
-//! mentions the string `libfuse.so.2` (its `DT_NEEDED` entry lives in `.dynstr`). A static
-//! runtime (no `PT_INTERP`, the modern type2-runtime) never needs it. A dynamic runtime
-//! without the string is assumed to want libfuse3 or nothing, so we do not flag it.
+//! `needs_fuse2`: true only when `libfuse.so.2` is a `DT_NEEDED` entry in the runtime's
+//! dynamic section, i.e. the loader cannot start it without that library. A static runtime
+//! (the modern type2-runtime) has no such entry, and a runtime that merely mentions the
+//! string (for example as a `dlopen` fallback after libfuse3) is not flagged.
 
 use std::collections::HashMap;
 use std::fs::File;
@@ -31,6 +30,11 @@ pub const MAX_SYMLINK_DEPTH: usize = 8;
 const MAX_RUNTIME_BYTES: u64 = 8 * 1024 * 1024;
 /// Icons wider than this are scaled down.
 const MAX_ICON_PX: u32 = 256;
+/// Icons larger than this (per side, from the PNG header) are not decoded at all.
+const MAX_ICON_SOURCE_PX: u32 = 4096;
+/// Text limits for fields that reach the UI.
+const MAX_NAME_CHARS: usize = 128;
+const MAX_COMMENT_CHARS: usize = 512;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct AppImageInspector;
@@ -83,7 +87,10 @@ pub fn inspect_path(path: &Path) -> Result<PackageMetadata, InspectError> {
         .take(offset.min(MAX_RUNTIME_BYTES))
         .read_to_end(&mut runtime)
         .map_err(io_err)?;
-    let needs_fuse2 = header.is_dynamic(&runtime) && contains(&runtime, b"libfuse.so.2");
+    let needs_fuse2 = header
+        .needed_libs(&runtime)
+        .iter()
+        .any(|lib| lib == "libfuse.so.2");
 
     let fs = FilesystemReader::from_reader_with_offset(BufReader::new(f), offset)
         .map_err(|_| InspectError::Corrupt)?;
@@ -98,23 +105,29 @@ pub fn inspect_path(path: &Path) -> Result<PackageMetadata, InspectError> {
 
     let display_name = entry
         .get("Name")
-        .filter(|s| !s.trim().is_empty())
-        .map_or_else(|| name_from_file(&file_stem), |s| s.trim().to_owned());
+        .map(|s| clean_text(s, MAX_NAME_CHARS))
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| clean_text(&name_from_file(&file_stem), MAX_NAME_CHARS));
+    let display_name = if display_name.is_empty() {
+        "App".to_owned()
+    } else {
+        display_name
+    };
     let version = entry
         .get("X-AppImage-Version")
-        .map(|s| s.trim().to_owned())
+        .map(|s| clean_text(s, MAX_NAME_CHARS))
         .filter(|s| !s.is_empty())
         .or_else(|| version_from_file(&file_stem))
         .unwrap_or_else(|| "0".to_owned());
     let summary = entry
         .get("Comment")
-        .map(|s| s.trim().to_owned())
+        .map(|s| clean_text(s, MAX_COMMENT_CHARS))
         .filter(|s| !s.is_empty());
     let icon = image.icon(entry.get("Icon").map(String::as_str));
 
     Ok(PackageMetadata {
         format: PackageFormat::AppImage,
-        name: AppId::from_name(&display_name).as_str().to_owned(),
+        name: machine_name(&display_name),
         display_name,
         version: Version::new(version),
         arch: header.arch(),
@@ -125,11 +138,27 @@ pub fn inspect_path(path: &Path) -> Result<PackageMetadata, InspectError> {
     })
 }
 
-fn contains(hay: &[u8], needle: &[u8]) -> bool {
-    hay.windows(needle.len()).any(|w| w == needle)
+/// "Lumen-Notes-1.2.3-x86_64" → "Lumen Notes" (name part before the first digit-led token).
+/// Machine name = slug of the display name. A name with letters outside ASCII (which the
+/// slug drops, so different apps could share one id) gets a short hash of the full name
+/// appended, e.g. `app-3fa9c1d2`.
+pub fn machine_name(display_name: &str) -> String {
+    let slug = AppId::from_name(display_name);
+    if !display_name
+        .chars()
+        .any(|c| c.is_alphanumeric() && !c.is_ascii())
+    {
+        return slug.as_str().to_owned();
+    }
+    let mut hash: u32 = 0x811c_9dc5; // FNV-1a
+    for b in display_name.bytes() {
+        hash ^= u32::from(b);
+        hash = hash.wrapping_mul(0x0100_0193);
+    }
+    let base: String = slug.as_str().chars().take(55).collect();
+    format!("{}-{hash:08x}", base.trim_end_matches('-'))
 }
 
-/// "Lumen-Notes-1.2.3-x86_64" → "Lumen Notes" (name part before the first digit-led token).
 fn name_from_file(stem: &str) -> String {
     let parts: Vec<&str> = stem
         .split(['-', '_', ' '])
@@ -177,6 +206,36 @@ pub fn parse_desktop_entry(text: &str) -> HashMap<String, String> {
         }
     }
     out
+}
+
+/// One clean line for the UI: control characters (including ones made by `\n` escapes) and
+/// bidi overrides are dropped or turned into spaces, whitespace collapsed, length capped.
+fn clean_text(s: &str, max_chars: usize) -> String {
+    let mut out = String::new();
+    for word in s
+        .chars()
+        .filter(|c| !is_bidi_control(*c))
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect::<String>()
+        .split_whitespace()
+    {
+        if !out.is_empty() {
+            out.push(' ');
+        }
+        out.push_str(word);
+        if out.chars().count() >= max_chars {
+            break;
+        }
+    }
+    out.chars()
+        .take(max_chars)
+        .collect::<String>()
+        .trim()
+        .to_owned()
+}
+
+fn is_bidi_control(c: char) -> bool {
+    matches!(c, '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
 }
 
 fn unescape(v: &str) -> String {
@@ -306,11 +365,13 @@ fn normalize(base: &Path, rel: &Path) -> PathBuf {
 }
 
 /// Accept PNG (scaled to at most 256 px) or SVG; anything else is no icon.
+/// A PNG whose header claims a huge size, or that fails to decode, is dropped rather than
+/// passed on: the UI would otherwise decode it later.
 fn sniff_icon(bytes: Vec<u8>) -> Option<IconData> {
     if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
-        return Some(IconData {
+        return shrink_png(bytes).map(|bytes| IconData {
             kind: IconKind::Png,
-            bytes: shrink_png(bytes),
+            bytes,
         });
     }
     let head = String::from_utf8_lossy(&bytes[..bytes.len().min(1024)]).into_owned();
@@ -323,12 +384,24 @@ fn sniff_icon(bytes: Vec<u8>) -> Option<IconData> {
     None
 }
 
-fn shrink_png(bytes: Vec<u8>) -> Vec<u8> {
-    let Ok(img) = image::load_from_memory_with_format(&bytes, image::ImageFormat::Png) else {
-        return bytes;
-    };
+/// Width and height from the IHDR chunk (first chunk, bytes 16..24).
+fn png_size(bytes: &[u8]) -> Option<(u32, u32)> {
+    if bytes.get(12..16)? != b"IHDR" {
+        return None;
+    }
+    let w = u32::from_be_bytes(bytes.get(16..20)?.try_into().ok()?);
+    let h = u32::from_be_bytes(bytes.get(20..24)?.try_into().ok()?);
+    Some((w, h))
+}
+
+fn shrink_png(bytes: Vec<u8>) -> Option<Vec<u8>> {
+    let (w, h) = png_size(&bytes)?;
+    if w == 0 || h == 0 || w > MAX_ICON_SOURCE_PX || h > MAX_ICON_SOURCE_PX {
+        return None;
+    }
+    let img = image::load_from_memory_with_format(&bytes, image::ImageFormat::Png).ok()?;
     if img.width() <= MAX_ICON_PX && img.height() <= MAX_ICON_PX {
-        return bytes;
+        return Some(bytes);
     }
     let small = img.resize(
         MAX_ICON_PX,
@@ -336,10 +409,8 @@ fn shrink_png(bytes: Vec<u8>) -> Vec<u8> {
         image::imageops::FilterType::Lanczos3,
     );
     let mut out = std::io::Cursor::new(Vec::new());
-    match small.write_to(&mut out, image::ImageFormat::Png) {
-        Ok(()) => out.into_inner(),
-        Err(_) => bytes,
-    }
+    small.write_to(&mut out, image::ImageFormat::Png).ok()?;
+    Some(out.into_inner())
 }
 
 /// Test helper: build a tiny type-2 AppImage (ELF stub + SquashFS) in memory.
@@ -391,6 +462,21 @@ pub(crate) mod testkit {
         s.into_bytes()
     }
 
+    /// Just the SquashFS bytes (for tests that bring their own ELF runtime).
+    pub fn build_squash_only(spec: Spec) -> Vec<u8> {
+        let mut w = FilesystemWriter::default();
+        let hdr = NodeHeader::new(0o644, 0, 0, 0);
+        for e in spec.entries {
+            match e {
+                Entry::File(p, data) => w.push_file(Cursor::new(data), p, hdr).unwrap(),
+                Entry::Link(p, target) => w.push_symlink(target, p, hdr).unwrap(),
+            }
+        }
+        let mut sq = Cursor::new(Vec::new());
+        w.write(&mut sq).unwrap();
+        sq.into_inner()
+    }
+
     pub fn build(spec: Spec) -> Vec<u8> {
         let mut w = FilesystemWriter::default();
         let hdr = NodeHeader::new(0o644, 0, 0, 0);
@@ -414,7 +500,7 @@ mod tests {
 
     use installer_domain::UnsupportedReason;
 
-    use super::testkit::{Entry, Spec, build, desktop, tiny_png};
+    use super::testkit::{Entry, Spec, build, build_squash_only, desktop, tiny_png};
     use super::*;
 
     fn write_tmp(bytes: &[u8]) -> (tempfile::TempDir, PathBuf) {
@@ -602,30 +688,27 @@ mod tests {
         assert_eq!(inspect_path(&p), Err(InspectError::Corrupt));
     }
 
+    /// An AppImage whose runtime is a real dynamic ELF needing `libs`.
+    fn with_needed(libs: &[&str]) -> Vec<u8> {
+        let mut out = crate::inspect::elf::testutil::elf_stub_needed(true, false, 62, 2, libs);
+        out.extend_from_slice(&build_squash_only(basic()));
+        out
+    }
+
     #[test]
-    fn fuse2_heuristic() {
-        // Dynamic runtime mentioning libfuse.so.2 => needs it. The marker goes into the
-        // zero-filled section table, which is part of the runtime.
-        let mut b = build(Spec {
-            dynamic: true,
-            ..basic()
-        });
-        let off = elf::ElfHeader::parse(&b)
-            .unwrap()
-            .squashfs_offset()
-            .unwrap() as usize;
-        b[off - 20..off - 8].copy_from_slice(b"libfuse.so.2");
-        let (_d, p) = write_tmp(&b);
-        assert!(inspect_path(&p).unwrap().needs_fuse2);
-
-        // Dynamic without the marker => not flagged.
-        let (_d, p) = write_tmp(&build(Spec {
-            dynamic: true,
-            ..basic()
-        }));
-        assert!(!inspect_path(&p).unwrap().needs_fuse2);
-
-        // Same marker but static runtime => not needed.
+    fn fuse2_only_when_needed_entry() {
+        let rows: [(&[&str], bool); 5] = [
+            (&["libfuse.so.2", "libc.so.6"], true),
+            (&["libc.so.6", "libfuse.so.2"], true),
+            (&["libfuse3.so.3", "libc.so.6"], false),
+            (&["libc.so.6"], false),
+            (&[], false),
+        ];
+        for (libs, want) in rows {
+            let (_d, p) = write_tmp(&with_needed(libs));
+            assert_eq!(inspect_path(&p).unwrap().needs_fuse2, want, "{libs:?}");
+        }
+        // The string alone (padding of a static runtime) is not enough.
         let mut stat = build(basic());
         let off = elf::ElfHeader::parse(&stat)
             .unwrap()
@@ -634,6 +717,38 @@ mod tests {
         stat[off - 20..off - 8].copy_from_slice(b"libfuse.so.2");
         let (_d, p) = write_tmp(&stat);
         assert!(!inspect_path(&p).unwrap().needs_fuse2);
+    }
+
+    #[test]
+    fn text_is_cleaned_and_capped() {
+        let rows = [
+            ("Evil\nApp\t\u{202e}gpj", "Evil App gpj"),
+            ("  a   b  ", "a b"),
+            ("\u{2066}x\u{2069}", "x"),
+            ("bell\u{7}x", "bell x"),
+            ("", ""),
+        ];
+        for (input, want) in rows {
+            assert_eq!(clean_text(input, 128), want, "{input:?}");
+        }
+        assert_eq!(clean_text(&"A".repeat(500), 128).chars().count(), 128);
+        assert_eq!(clean_text("ab cd ef", 4), "ab c");
+    }
+
+    #[test]
+    fn png_header_limits() {
+        // A header claiming 30000x30000 is dropped without decoding.
+        let mut p = tiny_png(8);
+        p[16..20].copy_from_slice(&30000u32.to_be_bytes());
+        p[20..24].copy_from_slice(&30000u32.to_be_bytes());
+        assert!(shrink_png(p).is_none());
+        assert!(shrink_png(b"\x89PNG\r\n\x1a\n".to_vec()).is_none());
+        // Undecodable body: no icon, not the original bytes.
+        let mut q = tiny_png(8);
+        let n = q.len();
+        q[n - 20..n - 12].fill(0xaa);
+        assert!(shrink_png(q).is_none());
+        assert_eq!(png_size(&tiny_png(8)), Some((8, 8)));
     }
 
     fn fixtures_dir() -> PathBuf {
@@ -670,16 +785,14 @@ mod tests {
             .unwrap() as usize;
         dw[off..off + 6].copy_from_slice(b"DWARFS");
         put("dwarfs.AppImage", dw);
-        let mut fuse = build(Spec {
-            dynamic: true,
-            ..basic()
-        });
-        let off = elf::ElfHeader::parse(&fuse)
-            .unwrap()
-            .squashfs_offset()
-            .unwrap() as usize;
-        fuse[off - 20..off - 8].copy_from_slice(b"libfuse.so.2");
-        put("fuse2-dynamic.AppImage", fuse);
+        put(
+            "fuse2-dynamic.AppImage",
+            with_needed(&["libfuse.so.2", "libc.so.6"]),
+        );
+        put(
+            "fuse3-dynamic.AppImage",
+            with_needed(&["libfuse3.so.3", "libc.so.6"]),
+        );
     }
 
     #[test]
@@ -717,6 +830,20 @@ mod tests {
         assert_eq!(m["Comment"], "a b\\c");
         assert_eq!(m["X-AppImage-Version"], "2.0");
         assert!(!m.contains_key("Name[fr]"));
+    }
+
+    #[test]
+    fn machine_name_keeps_non_ascii_names_apart() {
+        assert_eq!(machine_name("Lumen Notes"), "lumen-notes");
+        let a = machine_name("\u{65e5}\u{672c}\u{8a9e}");
+        let b = machine_name("\u{4e2d}\u{6587}");
+        assert_ne!(a, b);
+        assert!(a.starts_with("app-") && a.len() == 12, "{a}");
+        assert_eq!(a.parse::<AppId>().map(|i| i.to_string()), Ok(a.clone()));
+        let long = machine_name(&format!("{}\u{e9}", "x".repeat(100)));
+        assert!(long.len() <= 64 && long.parse::<AppId>().is_ok(), "{long}");
+        // Same name, same machine name.
+        assert_eq!(machine_name("Caf\u{e9}"), machine_name("Caf\u{e9}"));
     }
 
     #[test]
