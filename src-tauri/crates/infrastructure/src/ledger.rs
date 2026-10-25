@@ -82,7 +82,7 @@ impl JsonLedger {
         let text = match fs::read_to_string(&self.file) {
             Ok(t) => t,
             Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
-            Err(e) => return Err(BackendError::Io(e.to_string())),
+            Err(e) => return Err(io_backend(e)),
         };
         match serde_json::from_str::<LedgerFile>(&text) {
             Ok(f) if f.version > LEDGER_VERSION => Err(BackendError::Failed(format!(
@@ -107,26 +107,45 @@ impl JsonLedger {
         };
         let json =
             serde_json::to_vec_pretty(&file).map_err(|e| BackendError::Failed(e.to_string()))?;
-        write_atomic(&self.file, &json, 0o600).map_err(|e| BackendError::Io(e.to_string()))
+        write_atomic(&self.file, &json, 0o600).map_err(io_backend)
+    }
+
+    /// Run `f` holding the in-process mutex and an exclusive `flock` on `ledger.lock`, so
+    /// several handles or app instances never lose each other's updates. (The data file is
+    /// replaced by rename, so the lock lives on a separate file.)
+    fn locked<T>(&self, f: impl FnOnce() -> Result<T, BackendError>) -> Result<T, BackendError> {
+        let _guard = self
+            .lock
+            .lock()
+            .map_err(|_| BackendError::Failed("ledger lock poisoned".into()))?;
+        let dir = self
+            .file
+            .parent()
+            .ok_or_else(|| BackendError::Failed("ledger has no folder".into()))?;
+        fs::create_dir_all(dir).map_err(io_backend)?;
+        let lock_file = fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(dir.join("ledger.lock"))
+            .map_err(io_backend)?;
+        lock_file.lock().map_err(io_backend)?;
+        let result = f();
+        let _ = lock_file.unlock();
+        result
     }
 
     fn update(&self, f: impl FnOnce(&mut Vec<Record>)) -> Result<(), BackendError> {
-        let _guard = self
-            .lock
-            .lock()
-            .map_err(|_| BackendError::Failed("ledger lock poisoned".into()))?;
-        let mut apps = self.read()?;
-        f(&mut apps);
-        self.write(apps)
+        self.locked(|| {
+            let mut apps = self.read()?;
+            f(&mut apps);
+            self.write(apps)
+        })
     }
 
     fn list_blocking(&self) -> Result<Vec<InstalledApp>, BackendError> {
-        let _guard = self
-            .lock
-            .lock()
-            .map_err(|_| BackendError::Failed("ledger lock poisoned".into()))?;
-        Ok(self
-            .read()?
+        let records = self.locked(|| self.read())?;
+        Ok(records
             .into_iter()
             .map(|r| InstalledApp {
                 icon: self.icons.load_icon(r.id.as_str()),
@@ -141,6 +160,11 @@ impl JsonLedger {
             })
             .collect())
     }
+}
+
+/// I/O failures carry only the error kind, never the OS message.
+fn io_backend(e: io::Error) -> BackendError {
+    BackendError::Io(format!("io error: {:?}", e.kind()))
 }
 
 async fn blocking<T: Send + 'static>(

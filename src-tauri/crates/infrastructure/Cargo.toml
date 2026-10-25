@@ -37,7 +37,8 @@ dnf5daemon = ["dep:trait-variant"]
 
 [dev-dependencies]
 installer-application = { workspace = true, features = ["testing"] }
-tempfile = "3"
+tempfile = "3" # lane S3
+flate2 = "1" # lane S3 (review_r1 PNG bomb test)
 tokio = { workspace = true, features = ["sync", "macros", "rt", "rt-multi-thread", "time", "test-util", "fs"] }
 # lane S2b: builds tiny .rpm fixtures in tests
 rpm = { version = "0.30.2", default-features = false, features = ["payload", "gzip-compression", "xz-compression", "zstd-compression"] }

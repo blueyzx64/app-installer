@@ -51,28 +51,43 @@ impl AppImageStore {
         self
     }
 
+    /// The store root with symlinks resolved (`~/Applications` may be a link, or `/home` may
+    /// be). Falls back to the given path while the directory does not exist yet.
+    fn canonical_root(&self) -> PathBuf {
+        fs::canonicalize(&self.root).unwrap_or_else(|_| self.root.clone())
+    }
+
     fn install_blocking(
         &self,
         file: &PackageFile,
         meta: &PackageMetadata,
     ) -> Result<PathBuf, InstallError> {
         fs::create_dir_all(&self.root).map_err(io_to_install)?;
+        let root = self.canonical_root();
         let slug = AppId::from_name(&meta.display_name);
 
-        // Already in the store (for example opened from ~/Applications): just make it runnable.
-        if let (Ok(src), Ok(root)) = (fs::canonicalize(&file.path), fs::canonicalize(&self.root))
+        // Already in the store (for example opened from ~/Applications): make it runnable and
+        // make sure the library can see it (`<Name>.AppImage`, not hidden).
+        if let Ok(src) = fs::canonicalize(&file.path)
             && src.parent() == Some(root.as_path())
         {
-            set_executable(&src).map_err(io_to_install)?;
-            return Ok(src);
+            if is_listed_name(&src) {
+                set_executable(&src).map_err(io_to_install)?;
+                return Ok(src);
+            }
+            let target = pick_target(&root, &meta.display_name, &meta.name)?;
+            fs::rename(&src, &target).map_err(io_to_install)?;
+            set_executable(&target).map_err(io_to_install)?;
+            sync_dir(&root).map_err(io_to_install)?;
+            return Ok(target);
         }
 
-        let target = self.pick_target(&meta.display_name, &meta.name);
-        let partial = self.root.join(format!(".{}.partial", slug.as_str()));
+        let target = pick_target(&root, &meta.display_name, &meta.name)?;
+        let partial = root.join(format!(".{}.partial", slug.as_str()));
         let result = copy_synced(&file.path, &partial)
             .and_then(|()| set_executable(&partial))
             .and_then(|()| fs::rename(&partial, &target))
-            .and_then(|()| sync_dir(&self.root));
+            .and_then(|()| sync_dir(&root));
         if let Err(e) = result {
             let _ = fs::remove_file(&partial);
             return Err(io_to_install(e));
@@ -80,32 +95,19 @@ impl AppImageStore {
         Ok(target)
     }
 
-    /// `<Name>.AppImage`; replaces an older copy of the same app; otherwise ` (2)`, ` (3)`...
-    fn pick_target(&self, display_name: &str, machine_name: &str) -> PathBuf {
-        let base = file_safe_name(display_name);
-        let first = self.root.join(format!("{base}.AppImage"));
-        let mut candidate = first.clone();
-        for n in 2..=MAX_SUFFIX + 1 {
-            if !candidate.exists() || is_same_app(&candidate, machine_name) {
-                return candidate;
-            }
-            candidate = self.root.join(format!("{base} ({n}).AppImage"));
-        }
-        first
-    }
-
-    fn scan_blocking(&self) -> Vec<InstalledApp> {
-        let Ok(dir) = fs::read_dir(&self.root) else {
-            return Vec::new();
+    fn scan_blocking(&self) -> Result<Vec<InstalledApp>, InstallError> {
+        let root = self.canonical_root();
+        // A missing store is an empty store. Any other failure is an error, never "empty",
+        // so the library does not forget apps because of a read problem (D-035).
+        let dir = match fs::read_dir(&root) {
+            Ok(d) => d,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(e) => return Err(io_to_install(e)),
         };
         let mut apps = Vec::new();
         for entry in dir.filter_map(Result::ok) {
             let path = entry.path();
-            let is_appimage = path
-                .extension()
-                .is_some_and(|e| e.eq_ignore_ascii_case("appimage"));
-            let hidden = entry.file_name().to_string_lossy().starts_with('.');
-            if !is_appimage || hidden || !path.is_file() {
+            if !is_listed_name(&path) || !path.is_file() {
                 continue;
             }
             // A file we cannot read as an AppImage is not one of ours; skip it quietly.
@@ -118,7 +120,7 @@ impl AppImageStore {
                 .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
                 .and_then(|d| i64::try_from(d.as_secs()).ok())
                 .unwrap_or(0);
-            let id = AppId::from_name(&meta.display_name);
+            let id = AppId::from_name(&meta.name);
             apps.push(InstalledApp {
                 desktop_id: Some(format!("{}.desktop", desktop_stem(id.as_str()))),
                 id,
@@ -132,20 +134,28 @@ impl AppImageStore {
             });
         }
         apps.sort_by(|a, b| a.id.cmp(&b.id));
-        apps
+        Ok(apps)
     }
 
+    /// Idempotent: a file that is already gone counts as trashed, so the caller still
+    /// removes the menu entry and icons.
     fn trash_blocking(&self, app: &InstalledApp) -> Result<(), InstallError> {
-        let path = app.path.as_deref().ok_or(InstallError::NotFound)?;
-        // Only ever trash files that live in our store.
-        if path.parent() != Some(self.root.as_path()) {
+        let Some(path) = app.path.as_deref() else {
+            return Ok(());
+        };
+        if !path.exists() && !path.is_symlink() {
+            return Ok(());
+        }
+        // Only ever trash files that live in our store (compare with symlinks resolved).
+        let in_store = path
+            .parent()
+            .and_then(|p| fs::canonicalize(p).ok())
+            .is_some_and(|p| p == self.canonical_root());
+        if !in_store {
             return Err(InstallError::Unknown("app is not in the app store".into()));
         }
-        if !path.exists() {
-            return Err(InstallError::NotFound);
-        }
         (self.trash)(path)
-            .map_err(|e| InstallError::Unknown(format!("could not move to Trash: {e}")))
+            .map_err(|e| InstallError::Unknown(format!("trash failed ({:?})", e.kind())))
     }
 }
 
@@ -172,7 +182,7 @@ impl UserApps for AppImageStore {
         let this = self.clone();
         tokio::task::spawn_blocking(move || this.scan_blocking())
             .await
-            .map_err(|e| InstallError::Unknown(e.to_string()))
+            .map_err(|e| InstallError::Unknown(e.to_string()))?
     }
 }
 
@@ -182,6 +192,35 @@ fn gio_trash(path: &Path) -> io::Result<()> {
     gio::File::for_path(path)
         .trash(None::<&gio::Cancellable>)
         .map_err(io::Error::other)
+}
+
+/// Visible `*.AppImage` (any case): what `scan` lists.
+fn is_listed_name(path: &Path) -> bool {
+    let visible = path
+        .file_name()
+        .is_some_and(|n| !n.to_string_lossy().starts_with('.'));
+    visible
+        && path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("appimage"))
+}
+
+/// `<Name>.AppImage`; replaces an older copy of the same app; otherwise ` (2)`, ` (3)`...
+/// Never picks a stranger's file: when every slot is taken it fails.
+fn pick_target(
+    root: &Path,
+    display_name: &str,
+    machine_name: &str,
+) -> Result<PathBuf, InstallError> {
+    let base = file_safe_name(display_name);
+    let mut candidate = root.join(format!("{base}.AppImage"));
+    for n in 2..=MAX_SUFFIX + 1 {
+        if !candidate.exists() || is_same_app(&candidate, machine_name) {
+            return Ok(candidate);
+        }
+        candidate = root.join(format!("{base} ({n}).AppImage"));
+    }
+    Err(InstallError::Conflicts)
 }
 
 /// A file name that is safe in a directory: no separators, no control chars, no leading dot.
@@ -383,7 +422,7 @@ mod tests {
         let app = store.scan().await.unwrap().remove(0);
         store.trash(&app).await.unwrap();
         assert!(!inside.path.exists());
-        assert_eq!(store.trash(&app).await, Err(InstallError::NotFound));
+        assert_eq!(store.trash(&app).await, Ok(()));
 
         let out = make_appimage(outside.path(), "Out.AppImage", "Out", "1.0");
         let mut evil = app.clone();
