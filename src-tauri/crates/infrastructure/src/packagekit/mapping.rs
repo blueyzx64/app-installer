@@ -19,6 +19,46 @@ pub fn status_to_phase(status: PkStatus) -> InstallPhase {
     }
 }
 
+/// What the driver knows when a `Status` arrives.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PhaseCtx {
+    pub current: InstallPhase,
+    /// A status that means real work (download or install) was already seen.
+    pub seen_work: bool,
+    /// The transaction is a `RemovePackages`.
+    pub is_remove: bool,
+}
+
+/// Does this status mean real work started?
+pub fn implies_work(status: PkStatus) -> bool {
+    matches!(
+        status_to_phase(status),
+        InstallPhase::Downloading | InstallPhase::Installing
+    )
+}
+
+/// Status to phase with context. `None` = keep the current phase.
+///
+/// - `Run`: the daemon injects it right after `Setup` (before any download),
+///   but dnf5 also does the real install under `Run` after `Download` and
+///   never sends `Install`/`Commit`. So `Run` is `Installing` once work was
+///   seen, or in a remove (the UI labels it "Removing"); else `Preparing`.
+/// - `Cleanup`/`Finished` only mean `Finishing` once `Installing` was reached:
+///   a dismissed polkit dialog sends Status FINISHED before NOT_AUTHORIZED.
+pub fn status_phase(status: PkStatus, ctx: PhaseCtx) -> Option<InstallPhase> {
+    match status {
+        PkStatus::Run => Some(if ctx.seen_work || ctx.is_remove {
+            InstallPhase::Installing
+        } else {
+            InstallPhase::Preparing
+        }),
+        PkStatus::Cleanup | PkStatus::Finished => {
+            (rank(ctx.current) >= rank(InstallPhase::Installing)).then_some(InstallPhase::Finishing)
+        }
+        other => Some(status_to_phase(other)),
+    }
+}
+
 fn rank(p: InstallPhase) -> u8 {
     match p {
         InstallPhase::Preparing => 0,
@@ -478,6 +518,53 @@ mod tests {
             ),
             2
         );
+    }
+
+    #[test]
+    fn contextual_status_table() {
+        use InstallPhase::*;
+        let ctx = |current, seen_work, is_remove| PhaseCtx {
+            current,
+            seen_work,
+            is_remove,
+        };
+        let rows = [
+            (PkStatus::Run, ctx(Preparing, false, false), Some(Preparing)),
+            (
+                PkStatus::Run,
+                ctx(Downloading, true, false),
+                Some(Installing),
+            ),
+            (PkStatus::Run, ctx(Preparing, false, true), Some(Installing)),
+            (
+                PkStatus::Finished,
+                ctx(WaitingForPermission, false, false),
+                None,
+            ),
+            (PkStatus::Cleanup, ctx(Downloading, true, false), None),
+            (
+                PkStatus::Cleanup,
+                ctx(Installing, true, false),
+                Some(Finishing),
+            ),
+            (
+                PkStatus::Finished,
+                ctx(Installing, true, true),
+                Some(Finishing),
+            ),
+            (
+                PkStatus::Download,
+                ctx(Preparing, false, false),
+                Some(Downloading),
+            ),
+        ];
+        for (s, c, want) in rows {
+            assert_eq!(status_phase(s, c), want, "{s:?} {c:?}");
+        }
+        assert!(implies_work(PkStatus::Download));
+        assert!(implies_work(PkStatus::Install));
+        assert!(!implies_work(PkStatus::Run));
+        assert!(!implies_work(PkStatus::Query));
     }
 
     #[test]
