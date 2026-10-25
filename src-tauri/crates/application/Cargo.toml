@@ -10,12 +10,12 @@ description = "Use cases and port traits for the installer. No IO."
 testing = []
 
 [dependencies]
-installer-domain = { path = "../domain" }
-tracing = "0.1"
-trait-variant = "0.1"
+installer-domain.workspace = true
+tracing.workspace = true
+trait-variant.workspace = true
 # CancellationToken only (tokio-util::sync). No runtime is started here.
-tokio-util = { version = "0.7", default-features = false }
+tokio-util.workspace = true
 
 [dev-dependencies]
 installer-application = { path = ".", features = ["testing"] }
-tokio = { version = "1", features = ["rt", "macros", "time"] }
+tokio = { workspace = true, features = ["rt", "macros", "time"] }
