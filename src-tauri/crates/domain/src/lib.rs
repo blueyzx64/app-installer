@@ -13,7 +13,7 @@ pub mod package;
 pub mod preview;
 pub mod version;
 
-pub use app::{AppId, AppSource, InstalledApp, InvalidAppId};
+pub use app::{AppId, AppSource, InstalledApp, InvalidAppId, nfc};
 pub use appearance::{
     Appearance, ColorScheme, ControlButton, ControlSide, Rgb, WindowControls, button_layout,
 };

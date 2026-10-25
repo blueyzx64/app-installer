@@ -369,3 +369,120 @@ fn review_r1_no_process_spawn_in_inspect() {
         }
     }
 }
+
+// ---- Re-verification round: attacks on the fixes ----
+
+/// Turn a real system ELF into an AppImage runtime (AI\x02 in e_ident padding) + SquashFS.
+fn from_real_elf(path: &str, patch: Option<(&[u8], &[u8])>) -> Option<Vec<u8>> {
+    let mut b = std::fs::read(path).ok()?;
+    if let Some((from, to)) = patch {
+        let at = b.windows(from.len()).position(|w| w == from)?;
+        b[at..at + to.len()].copy_from_slice(to);
+    }
+    b[8..11].copy_from_slice(b"AI\x02");
+    b.extend(squash(vec![("/a.desktop", desk("Real"))]));
+    Some(b)
+}
+
+/// fuse2 detection on a real toolchain ELF (not the test stub): /usr/bin/ls with its
+/// `libselinux.so.1` DT_NEEDED string patched to `libfuse.so.2`.
+#[test]
+fn review_r1_rv_fuse2_real_elf_needed() {
+    let Some(plain) = from_real_elf("/usr/bin/ls", None) else {
+        eprintln!("no /usr/bin/ls; skipped");
+        return;
+    };
+    let (_d, p) = tmp(&plain, "ls.AppImage");
+    assert!(!inspect_path(&p).unwrap().needs_fuse2, "plain ls flagged");
+    let fuse = from_real_elf(
+        "/usr/bin/ls",
+        Some((b"libselinux.so.1\0", b"libfuse.so.2\0\0\0\0")),
+    )
+    .unwrap();
+    let (_d, p) = tmp(&fuse, "ls2.AppImage");
+    assert!(
+        inspect_path(&p).unwrap().needs_fuse2,
+        "real dynamic ELF with DT_NEEDED libfuse.so.2 not flagged"
+    );
+}
+
+/// Same for a non-PIE EXEC (python3, ~6.5 MB runtime) when present.
+#[test]
+fn review_r1_rv_fuse2_real_exec_elf() {
+    let Some(fuse) = from_real_elf(
+        "/usr/bin/python3",
+        Some((b"libexpat.so.1\0", b"libfuse.so.2\0\0")),
+    ) else {
+        eprintln!("no python3 with libexpat; skipped");
+        return;
+    };
+    let (_d, p) = tmp(&fuse, "py.AppImage");
+    assert!(inspect_path(&p).unwrap().needs_fuse2);
+}
+
+/// Name made only of zero-width / invisible format chars must not become an invisible title.
+#[test]
+fn review_r1_rv_invisible_name_falls_back() {
+    let (_d, p) = tmp(
+        &image(vec![(
+            "/a.desktop",
+            desk("\u{200B}\u{200C}\u{200D}\u{FEFF}\u{2060}"),
+        )]),
+        "Lumen-Notes-1.0-x86_64.AppImage",
+    );
+    let m = inspect_path(&p).unwrap();
+    assert!(
+        m.display_name.chars().any(|c| c.is_alphanumeric()),
+        "invisible display_name: {:?}",
+        m.display_name
+    );
+}
+
+/// Other bidi controls (RLM/LRM/ALM) slip past the 202A-202E/2066-2069 filter.
+#[test]
+fn review_r1_rv_bidi_marks_stripped() {
+    let (_d, p) = tmp(
+        &image(vec![(
+            "/a.desktop",
+            desk("Notes\u{200F}\u{061C}\u{200E}exe"),
+        )]),
+        "x.AppImage",
+    );
+    let m = inspect_path(&p).unwrap();
+    assert!(
+        !m.display_name
+            .chars()
+            .any(|c| matches!(c, '\u{200E}' | '\u{200F}' | '\u{061C}')),
+        "bidi marks kept: {:?}",
+        m.display_name
+    );
+}
+
+/// Different apps whose names differ only in emoji/symbols must not share a machine name
+/// (machine name decides "update of same app" -> overwrite).
+#[test]
+fn review_r1_rv_symbol_only_difference_distinct_ids() {
+    let a = installer_infrastructure::inspect::appimage::machine_name("\u{1F3B5} Music");
+    let b = installer_infrastructure::inspect::appimage::machine_name("\u{1F3AE} Music");
+    assert_ne!(a, b, "both -> {a}");
+}
+
+/// Icon at the new 4096 px cap: still decodes + Lanczos-resizes on every inspect. Measure.
+#[test]
+fn review_r1_rv_icon_at_cap_cost() {
+    let img = image::RgbaImage::from_pixel(4096, 4096, image::Rgba([1, 2, 3, 255]));
+    let mut c = Cursor::new(Vec::new());
+    img.write_to(&mut c, image::ImageFormat::Png).unwrap();
+    let png = c.into_inner();
+    assert!(png.len() < 2 * 1024 * 1024);
+    let (_d, p) = tmp(
+        &image(vec![("/a.desktop", desk("A")), ("/.DirIcon", png)]),
+        "x.AppImage",
+    );
+    let t = Instant::now();
+    let m = inspect_path(&p).unwrap();
+    let el = t.elapsed();
+    eprintln!("4096px icon inspect (debug build): {el:?}");
+    let (w, h) = png_dims(&m.icon.unwrap().bytes);
+    assert!(w <= 256 && h <= 256);
+}

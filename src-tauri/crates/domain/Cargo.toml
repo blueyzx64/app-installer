@@ -8,6 +8,7 @@ description = "Pure domain model and rules for the installer. No IO."
 [dependencies]
 serde.workspace = true
 thiserror.workspace = true
+unicode-normalization = "0.1"
 
 [dev-dependencies]
 serde_json.workspace = true

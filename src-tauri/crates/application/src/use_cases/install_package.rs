@@ -234,6 +234,7 @@ mod tests {
                 meta,
                 compat,
                 needs_permission: scope.needs_permission(),
+                installed_app_id: None,
             })
         }
     }

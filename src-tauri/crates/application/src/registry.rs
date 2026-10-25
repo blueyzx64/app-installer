@@ -218,6 +218,7 @@ mod tests {
             meta: sample_meta(PackageFormat::Rpm),
             compat: Compatibility::Ok,
             needs_permission: true,
+            installed_app_id: None,
         })
         .id
     }
