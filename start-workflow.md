@@ -9,6 +9,26 @@ How one **orchestrator** runs up to **10 Sonnet** and **50 Haiku** agents at a t
 
 ---
 
+## 0. Doc index (full paths; short names used below map here)
+
+| Short name | Path |
+|---|---|
+| CLAUDE.md | [`CLAUDE.md`](CLAUDE.md) |
+| ARCHITECTURE §n | [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) (sections numbered 1–15) |
+| folder-structure | [`docs/architecture/folder-structure.md`](docs/architecture/folder-structure.md) |
+| ipc-contract | [`docs/architecture/ipc-contract.md`](docs/architecture/ipc-contract.md) |
+| state-machines | [`docs/architecture/state-machines.md`](docs/architecture/state-machines.md) |
+| FEATURES / ROADMAP | [`docs/product/FEATURES.md`](docs/product/FEATURES.md) · [`docs/product/ROADMAP.md`](docs/product/ROADMAP.md) |
+| DESIGN-SYSTEM §n | [`docs/design/DESIGN-SYSTEM.md`](docs/design/DESIGN-SYSTEM.md) (sections 1–8) |
+| COPY | [`docs/design/COPY.md`](docs/design/COPY.md) |
+| fedora-gnome "<heading>" | [`docs/platform/fedora-gnome.md`](docs/platform/fedora-gnome.md) |
+| DEVELOPMENT | [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) |
+| ADR-00nn | [`docs/adr/`](docs/adr/README.md) (`docs/adr/00nn-*.md`) |
+| prototype | [`design/prototype/index.html`](design/prototype/index.html) |
+| skill `<name>` | `.claude/skills/<name>/SKILL.md` (e.g. [`rust-clean-architecture`](.claude/skills/rust-clean-architecture/SKILL.md)) |
+
+Agents read docs by **path plus section heading**, e.g. `Grep "^## 7\." docs/architecture/ARCHITECTURE.md`, then Read with `offset`/`limit`. Never read a whole doc unless the context pack says so.
+
 ## 1. Roles and hard limits
 
 | Tier | Who | How many at once | Job | Never |
@@ -94,7 +114,9 @@ Lane = one lead, its workers, and the paths it owns. Shared files have a single 
 You are S2, lead of lane B (System packages) in the app-installer swarm.
 Load skills: caveman:caveman, rust-clean-architecture, linux-package-backends. No others.
 Read: $SWARM/shared/brief.md, contracts.md, decisions.md, ownership.md, board.md (your rows).
-Docs: ARCHITECTURE.md §6, §7, §9.2 · platform/fedora-gnome.md "D-Bus services" · ADR-0004, ADR-0007.
+Docs (path → section, read only these): docs/architecture/ARCHITECTURE.md §6, §7, §9.2 ·
+      docs/platform/fedora-gnome.md "D-Bus services" · docs/adr/0004-*.md, docs/adr/0007-*.md
+      (= your row in §8 Context packs). Skills: .claude/skills/<name>/SKILL.md.
 Own paths: <from ownership.md>. Don't edit anything else; for changes elsewhere, write ASK O.
 Memory: write ONLY $SWARM/agents/S2.md and $SWARM/agents/S2/tickets/. Caveman prose. ≤60 lines.
 Wave goal: <from board>. Your features: <IDs> with the acceptance criteria in FEATURES.md.
@@ -149,7 +171,8 @@ T-B-07 · lane B · lead S2 · haiku
 SKILL: linux-package-backends            # exactly one (+ caveman)
 GOAL: map PK Status u32 → InstallPhase.
 FILES: src-tauri/crates/infrastructure/src/packagekit/mapping.rs (edit only)
-READ: skill §"PackageKit adapter" bullet "Progress". contracts.md §InstallPhase.
+READ: .claude/skills/linux-package-backends/SKILL.md "PackageKit adapter" → "Progress" bullet
+      $SWARM/shared/contracts.md §InstallPhase
 SIG:  pub fn phase_from_status(status: u32) -> InstallPhase
       pub fn percent_from_pk(p: u32) -> Option<u8>   // 101 → None
 TEST: cd src-tauri && cargo test -p installer-infrastructure packagekit::mapping
@@ -241,17 +264,18 @@ for each wave:
 
 ## 8. Context packs (what each role reads, and nothing more)
 
-| Role | Read |
+| Role | Read (path → section) |
 |---|---|
-| Everyone | `$SWARM/shared/brief.md`, `contracts.md`, `decisions.md`, `CLAUDE.md` |
-| S1 | ARCHITECTURE §4–6, state-machines (domain-relevant), ADR-0003 |
-| S2 | ARCHITECTURE §7, §9.2, §9.4 · fedora-gnome "D-Bus services" · ADR-0004, ADR-0007 |
-| S3 | ARCHITECTURE §7, §9.3 · fedora-gnome "AppImage specifics", "Freedesktop files" · ADR-0005 |
-| S4 | ipc-contract.md · ARCHITECTURE §8, §12 (security) · ADR-0009 |
-| S5 | ARCHITECTURE §10 · state-machines.md · ipc-contract.md · COPY.md |
-| S6 | DESIGN-SYSTEM.md · `design/prototype/index.html` (CSS + markup only) · COPY.md (keys) |
-| S7 | DESIGN-SYSTEM §5 · fedora-gnome "GSettings we read" · ADR-0006 |
-| S8 | ARCHITECTURE §14 · DEVELOPMENT.md |
-| S9 | FEATURES.md (acceptance criteria for the wave) · state-machines.md |
-| S10 | the diff + CLAUDE.md non-negotiables + the one layer skill |
-| Haiku | its ticket only (plus whatever the ticket's READ line names) |
+| Everyone | `$SWARM/shared/brief.md`, `contracts.md`, `decisions.md` · [`CLAUDE.md`](CLAUDE.md) |
+| S1 | [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) §4, §5, §6 · [`docs/architecture/state-machines.md`](docs/architecture/state-machines.md) (domain parts) · [`docs/adr/0003-clean-architecture-crates.md`](docs/adr/0003-clean-architecture-crates.md) |
+| S2 | [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) §7, §9.2, §9.4 · [`docs/platform/fedora-gnome.md`](docs/platform/fedora-gnome.md) "D-Bus services" · [`docs/adr/0004-packagekit-primary-dnf5daemon-fallback.md`](docs/adr/0004-packagekit-primary-dnf5daemon-fallback.md), [`docs/adr/0007-polkit-owns-authentication.md`](docs/adr/0007-polkit-owns-authentication.md) |
+| S3 | [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) §7, §9.3 · [`docs/platform/fedora-gnome.md`](docs/platform/fedora-gnome.md) "AppImage specifics", "Freedesktop files we write" · [`docs/adr/0005-inspect-appimages-without-executing.md`](docs/adr/0005-inspect-appimages-without-executing.md) |
+| S4 | [`docs/architecture/ipc-contract.md`](docs/architecture/ipc-contract.md) · [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) §8, §12 · [`docs/architecture/folder-structure.md`](docs/architecture/folder-structure.md) · [`docs/adr/0009-generated-typed-ipc.md`](docs/adr/0009-generated-typed-ipc.md) |
+| S5 | [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) §10 · [`docs/architecture/state-machines.md`](docs/architecture/state-machines.md) · [`docs/architecture/ipc-contract.md`](docs/architecture/ipc-contract.md) · [`docs/design/COPY.md`](docs/design/COPY.md) |
+| S6 | [`docs/design/DESIGN-SYSTEM.md`](docs/design/DESIGN-SYSTEM.md) · [`design/prototype/index.html`](design/prototype/index.html) (CSS + markup only) · [`docs/design/COPY.md`](docs/design/COPY.md) (keys) |
+| S7 | [`docs/design/DESIGN-SYSTEM.md`](docs/design/DESIGN-SYSTEM.md) §5 · [`docs/platform/fedora-gnome.md`](docs/platform/fedora-gnome.md) "GSettings we read" · [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) §11 · [`docs/adr/0006-window-controls-follow-gnome-layout.md`](docs/adr/0006-window-controls-follow-gnome-layout.md) |
+| S8 | [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) §14 · [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) · [`docs/adr/0008-fedora-first.md`](docs/adr/0008-fedora-first.md) |
+| S9 | [`docs/product/FEATURES.md`](docs/product/FEATURES.md) (wave's IDs only) · [`docs/architecture/state-machines.md`](docs/architecture/state-machines.md) · [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) §13 |
+| S10 | the diff · [`CLAUDE.md`](CLAUDE.md) "Non-negotiables" · one layer skill |
+| Haiku | its ticket only (plus the ticket's READ line, always as path + section) |
+| O (W0) | all of the above, once; then only `$SWARM/` + diffs |
