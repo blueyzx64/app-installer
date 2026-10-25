@@ -220,6 +220,32 @@ mod tests {
                 C::Ok,
             ),
             (
+                "static runtime (needs_fuse2 false) on host without fuse2",
+                meta(PackageFormat::AppImage, Arch::X86_64, "1.0", false),
+                host(RpmBased, Arch::X86_64, false),
+                None,
+                C::Ok,
+            ),
+            (
+                "missing fuse2 beats already installed",
+                meta(PackageFormat::AppImage, Arch::X86_64, "2.0", true),
+                host(RpmBased, Arch::X86_64, false),
+                ver("1.0"),
+                C::MissingRuntime {
+                    what: Runtime::Fuse2,
+                },
+            ),
+            (
+                "wrong arch beats missing fuse2",
+                meta(PackageFormat::AppImage, Arch::Aarch64, "1.0", true),
+                host(RpmBased, Arch::X86_64, false),
+                None,
+                C::WrongArch {
+                    package: Arch::Aarch64,
+                    host: Arch::X86_64,
+                },
+            ),
+            (
                 "same version",
                 meta(PackageFormat::Rpm, Arch::X86_64, "1.0-1", false),
                 host(RpmBased, Arch::X86_64, true),

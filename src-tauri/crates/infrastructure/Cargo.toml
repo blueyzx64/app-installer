@@ -9,3 +9,6 @@ description = "Adapters that implement the application ports (PackageKit, AppIma
 installer-domain.workspace = true
 installer-application.workspace = true
 # Lanes B and C add zbus, backhand, rpm, gio, ashpd, tokio, serde_json here.
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }

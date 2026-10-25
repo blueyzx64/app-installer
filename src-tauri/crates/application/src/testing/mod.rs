@@ -249,6 +249,8 @@ pub struct FakeSystemPackages {
     installed: Mutex<HashMap<String, Version>>,
     plan: Mutex<InstallPlan>,
     plan_err: Failure<BackendError>,
+    removal: Mutex<u32>,
+    removal_err: Failure<BackendError>,
     installed_err: Failure<BackendError>,
     install_err: Failure<InstallError>,
     remove_err: Failure<InstallError>,
@@ -265,6 +267,13 @@ impl FakeSystemPackages {
     }
     pub fn set_plan(&self, plan: InstallPlan) {
         *self.plan.lock().unwrap() = plan;
+    }
+    /// Extra packages `removal_plan` reports.
+    pub fn set_removal_plan(&self, also_removes: u32) {
+        *self.removal.lock().unwrap() = also_removes;
+    }
+    pub fn fail_removal_plan(&self, e: BackendError) {
+        self.removal_err.set(e);
     }
     pub fn fail_installed_version(&self, e: BackendError) {
         self.installed_err.set(e);
@@ -327,6 +336,12 @@ impl SystemPackages for FakeSystemPackages {
             Some(3),
         ));
         Ok(())
+    }
+
+    async fn removal_plan(&self, name: &str) -> Result<u32, BackendError> {
+        self.log(format!("removal_plan {name}"));
+        self.removal_err.check()?;
+        Ok(*self.removal.lock().unwrap())
     }
 
     async fn remove(&self, name: &str, observer: &dyn InstallObserver) -> Result<(), InstallError> {
