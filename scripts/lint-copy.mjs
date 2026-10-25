@@ -119,6 +119,7 @@ function lintSvelte(file) {
         return; // other attributes (class, href ...) are not copy
       }
       case 'Comment':
+      case 'StyleDirective': // style:width="{size}px" is CSS, not copy
         return;
       default:
         for (const [k, v] of Object.entries(node)) {

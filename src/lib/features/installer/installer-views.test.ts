@@ -81,7 +81,7 @@ describe('IncompatibleView', () => {
   it('explains a wrong-family package without technical words', async () => {
     const onclose = vi.fn();
     render(IncompatibleView, { kind: 'wrongFamily.debBased', appName: 'Lumen Notes', onclose });
-    expect(screen.getByText("Lumen Notes can't be installed here")).toBeInTheDocument();
+    expect(screen.getByText('Lumen Notes can’t be installed here')).toBeInTheDocument();
     expect(screen.getByText(/made for Ubuntu-based computers/)).toBeInTheDocument();
     await fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(onclose).toHaveBeenCalledOnce();
