@@ -1,4 +1,4 @@
-import { removeErrorCopy, text, trashCopy } from '$lib/core/copy/copy';
+import { extrasCopy, removeErrorCopy, text, trashCopy } from '$lib/core/copy/copy';
 import {
   appsOf,
   initialLibraryState,
@@ -7,7 +7,7 @@ import {
   type LibraryState
 } from '$lib/core/domain/library-machine';
 import { toCommandError, type InstallEvent, type InstalledApp } from '$lib/core/domain/types';
-import type { Gateways } from '$lib/core/ports';
+import type { Gateways, UninstallPlan } from '$lib/core/ports';
 import { t } from '$lib/i18n';
 
 /** How long a failure toast stays before it hides itself. */
@@ -20,6 +20,8 @@ export interface ConfirmView {
   confirmLabel: string;
   cancelLabel: string;
   system: boolean;
+  /** The plan has arrived, so Confirm is allowed. */
+  ready: boolean;
 }
 
 export class LibraryController {
@@ -41,10 +43,12 @@ export class LibraryController {
     const s = this.state;
     if (s.tag !== 'confirming') return null;
     const c = trashCopy(s.app);
+    const extras = s.plan ? extrasCopy(s.app.displayName, s.plan.alsoRemoves) : null;
     return {
       app: s.app,
       title: text(c.title),
-      body: text(c.body),
+      body: extras ? `${text(c.body)} ${text(extras)}` : text(c.body),
+      ready: s.plan !== null,
       confirmLabel: text(c.confirm),
       cancelLabel: text(c.cancel),
       system: c.system
@@ -78,8 +82,18 @@ export class LibraryController {
     }
   }
 
-  requestTrash(appId: string): void {
+  async requestTrash(appId: string): Promise<void> {
     this.#dispatch({ type: 'TRASH', appId });
+    const s = this.state;
+    if (s.tag !== 'confirming' || s.app.id !== appId) return;
+    let plan: UninstallPlan;
+    try {
+      plan = await this.#gw.library.uninstallPlan(appId);
+    } catch {
+      // No plan is not a reason to block removal. Fall back to the plain case.
+      plan = { alsoRemoves: 0, needsPermission: s.app.source === 'systemPackage' };
+    }
+    this.#dispatch({ type: 'PLAN_LOADED', appId, plan });
   }
 
   cancelTrash(): void {

@@ -3,10 +3,11 @@ import type {
   DefaultStatus,
   InstallEvent,
   InstallOutcome,
-  InstalledApp,
-  PackagePreview,
-  UninstallOutcome
+  PackagePreview
 } from '../domain/types';
+import type { LibraryGateway } from './library-gateway';
+
+export type { LibraryGateway, UninstallPlan } from './library-gateway'; // lane S12
 
 export interface InstallerGateway {
   takeLaunchFile(): Promise<string | null>;
@@ -15,12 +16,6 @@ export interface InstallerGateway {
   cancelInstall(previewId: string): Promise<void>;
   /** Returns an unsubscribe function. */
   onOpenFile(cb: (path: string) => void): () => void;
-}
-
-export interface LibraryGateway {
-  listInstalled(): Promise<InstalledApp[]>;
-  uninstall(appId: string, onEvent: (e: InstallEvent) => void): Promise<UninstallOutcome>;
-  launchApp(appId: string): Promise<void>;
 }
 
 export interface DefaultsGateway {
