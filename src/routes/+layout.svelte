@@ -45,3 +45,11 @@
     {@render children()}
   </div>
 </WindowChrome>
+
+<style>
+  /* Fills the window body so full-window children (Alert, Sheet dim) have a box to centre in. */
+  .app-shell {
+    position: absolute;
+    inset: 0;
+  }
+</style>

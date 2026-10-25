@@ -18,6 +18,25 @@
 
   const { installer, defaultHandler } = useControllers();
 
+  let root = $state<HTMLElement | null>(null);
+
+  // F-21: the app icon is the first Tab stop on the ready screen (the close button stays reachable).
+  // Not while the default-handler sheet is up: it owns focus and hands it back when it closes.
+  $effect(() => {
+    if (installer.state.tag === 'ready' && !defaultHandler.sheetVisible) {
+      root?.querySelector<HTMLElement>('button.icon')?.focus({ preventScroll: true });
+    }
+  });
+
+  // Escape on the error screen = its Close button (the Alert's cancel). Close ends this
+  // package; the window closes only when no other package is waiting. Busy screens ignore Esc.
+  function onkeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && !e.defaultPrevented && installer.state.tag === 'failed') {
+      e.preventDefault();
+      installer.close();
+    }
+  }
+
   // Nothing opened (direct visit, or the window stayed open after Close): show the library.
   $effect(() => {
     if (installer.state.tag === 'idle') {
@@ -30,7 +49,9 @@
   });
 </script>
 
-<main class="install" data-state={installer.state.tag}>
+<svelte:window {onkeydown} />
+
+<main class="install" data-state={installer.state.tag} bind:this={root}>
   {#if installer.showDmg}
     <DmgView
       appName={installer.appName}
@@ -124,6 +145,7 @@
   .install {
     position: relative;
     height: 100%;
+    min-height: 100%;
   }
   .center {
     display: grid;
