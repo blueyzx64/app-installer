@@ -159,11 +159,11 @@
 <style>
   .cell {
     position: relative;
-    width: 112px;
+    width: var(--cell-library);
   }
   .tile {
     width: 100%;
-    min-height: 44px;
+    min-height: var(--hit-min);
     padding: var(--sp-2) var(--sp-1);
     display: flex;
     flex-direction: column;
@@ -178,8 +178,8 @@
     background: var(--fill-hover);
   }
   .tile:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
+    outline: var(--focus-width) solid var(--accent);
+    outline-offset: var(--focus-offset);
   }
   .tile.busy {
     opacity: 0.5;
@@ -200,8 +200,8 @@
     position: absolute;
     top: 0;
     right: 0;
-    width: 28px;
-    height: 28px;
+    width: var(--more-size);
+    height: var(--more-size);
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -210,25 +210,28 @@
     color: var(--label-secondary);
     line-height: 1;
   }
-  /* The visible circle is small; the touch target is 44 px. */
+  /* The visible circle is small; the touch target is --hit-min. */
   .more::after {
     content: '';
     position: absolute;
-    inset: -8px;
+    inset: calc((var(--more-size) - var(--hit-min)) / 2);
   }
   .more:hover,
   .more:focus-visible {
     background: var(--accent);
     color: var(--on-accent);
-    outline: none;
+  }
+  .more:focus-visible {
+    outline: var(--focus-width) solid var(--accent);
+    outline-offset: var(--focus-offset);
   }
   .menu {
     position: absolute;
-    top: 80px;
+    top: calc(var(--icon-library) + var(--sp-2));
     left: 50%;
     transform: translateX(-50%);
     z-index: 3;
-    min-width: 160px;
+    min-width: var(--w-menu-min);
     padding: var(--sp-1);
     display: flex;
     flex-direction: column;
@@ -240,7 +243,7 @@
     animation: var(--anim-fade);
   }
   .menu button {
-    min-height: 44px;
+    min-height: var(--hit-min);
     padding: 0 var(--sp-3);
     border-radius: var(--r-button);
     text-align: left;
@@ -252,6 +255,9 @@
   .menu button:focus-visible {
     background: var(--accent);
     color: var(--on-accent);
-    outline: none;
+  }
+  .menu button:focus-visible {
+    outline: var(--focus-width) solid var(--label);
+    outline-offset: calc(var(--focus-width) * -1);
   }
 </style>

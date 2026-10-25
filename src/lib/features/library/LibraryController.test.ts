@@ -163,6 +163,20 @@ describe('LibraryController', () => {
     c.dismissNotice();
     expect(c.notice).toBeNull();
   });
+  it('a list that lands during removal is applied after, without the removed app', async () => {
+    const { c, gw } = await setup('rpm');
+    await c.requestTrash('pixel-draw');
+    const p = c.confirmTrash();
+    const stale = [...c.apps];
+    const real = gw.library.listInstalled;
+    gw.library.listInstalled = async () => stale.filter((a) => a.id !== 'tidy-tasks');
+    await c.load(); // removal still running: kept as pending
+    expect(c.state.tag).toBe('removing');
+    gw.library.listInstalled = real;
+    await vi.advanceTimersByTimeAsync(5000);
+    await p;
+    expect(c.apps.map((a) => a.id)).toEqual(['orbit-player']);
+  });
   it('launch calls the gateway and swallows errors', async () => {
     const { c, gw } = await setup('rpm');
     await c.launch('pixel-draw');

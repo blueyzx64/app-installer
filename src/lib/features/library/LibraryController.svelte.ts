@@ -76,13 +76,18 @@ export class LibraryController {
   });
 
   #loadSeq = 0;
+  /** Newest list that arrived while the alert was up or a removal ran. Applied on return. */
+  #pending: InstalledApp[] | null = null;
 
   async load(): Promise<void> {
     // The controller outlives the route: a slow earlier load must not overwrite a newer one.
     const seq = ++this.#loadSeq;
     try {
       const apps = await this.#gw.library.listInstalled();
-      if (seq === this.#loadSeq) this.#dispatch({ type: 'LOADED', apps });
+      if (seq !== this.#loadSeq) return;
+      const tag = this.state.tag;
+      if (tag === 'confirming' || tag === 'removing') this.#pending = apps;
+      else this.#dispatch({ type: 'LOADED', apps });
     } catch (e) {
       if (seq === this.#loadSeq) this.#dispatch({ type: 'LOAD_FAILED', error: toCommandError(e) });
     }
@@ -103,6 +108,15 @@ export class LibraryController {
 
   cancelTrash(): void {
     this.#dispatch({ type: 'CANCEL' });
+    this.#applyPending(null);
+  }
+
+  /** Apply a list that arrived during the alert or removal, minus an app just removed. */
+  #applyPending(removedId: string | null): void {
+    const apps = this.#pending;
+    this.#pending = null;
+    if (!apps || this.state.tag === 'confirming' || this.state.tag === 'removing') return;
+    this.#dispatch({ type: 'LOADED', apps: apps.filter((a) => a.id !== removedId) });
   }
 
   async confirmTrash(): Promise<void> {
@@ -114,14 +128,20 @@ export class LibraryController {
     const onEvent = (e: InstallEvent) => {
       if (e.kind === 'progress') this.removalAskingPermission = e.phase === 'waitingForPermission';
     };
+    let removed = false;
     try {
       const outcome = await this.#gw.library.uninstall(app.id, onEvent);
+      // Lists fetched while removing may predate it: never let them bring the app back.
+      this.#loadSeq++;
+      removed = outcome.kind === 'removed';
       if (outcome.kind === 'failed') this.#showNoticeFor(app.displayName);
       this.#dispatch({ type: 'UNINSTALL_DONE', outcome });
     } catch (e) {
+      this.#loadSeq++;
       this.#showNoticeFor(app.displayName);
       this.#dispatch({ type: 'UNINSTALL_FAILED', error: toCommandError(e) });
     }
+    this.#applyPending(removed ? app.id : null);
     this.removalAskingPermission = false;
   }
 
