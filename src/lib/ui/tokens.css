@@ -1,0 +1,239 @@
+/*
+ * Design tokens. Components use these and nothing else (no raw colours).
+ * Scheme:   [data-scheme="dark"]      set by AppearanceStore
+ * Contrast: [data-contrast="more"]
+ * Motion:   [data-motion="reduce"]    set from GNOME / prefers-reduced-motion
+ * Accent:   AppearanceStore sets --accent and --on-accent inline on :root.
+ */
+:root {
+  color-scheme: light;
+
+  /* colour */
+  --accent: #0b6bd6;
+  --on-accent: #ffffff;
+  --window-bg: #f5f5f7;
+  --titlebar-bg: #ececee;
+  --surface: #ffffff;
+  --separator: #d8d8dc;
+  --label: #1d1d1f;
+  --label-secondary: #6e6e73;
+  --label-tertiary: #3a3a3c;
+  --glyph-muted: #aeaeb2;
+  --fill-secondary: #e8e8ed;
+  --fill-hover: rgb(0 0 0 / 10%);
+  --track: #dcdce1;
+  --success: #2e9e4f;
+  --on-success: #ffffff;
+  --danger: #b42318;
+  --light-close: #ff5f57;
+  --light-min: #febc2e;
+  --light-zoom: #28c840;
+  --light-inactive: #d1d1d6;
+  --material-thin: rgb(246 246 248 / 78%);
+  --material-toast: rgb(246 246 248 / 94%);
+  --material-blur: blur(20px) saturate(180%);
+  --alert-bg: #f6f6f8;
+  --dim-sheet: rgb(245 245 247 / 55%);
+  --dim-modal: rgb(0 0 0 / 28%);
+  --icon-shadow: drop-shadow(0 4px 6px rgb(0 0 0 / 12%));
+  --icon-shadow-lifted: drop-shadow(0 14px 18px rgb(0 0 0 / 28%));
+  --folder-top: #3d8fe0;
+  --folder-body: #5aacf5;
+  --folder-mark: #2f7bd0;
+  --app-badge: #ffc94d;
+  --app-paper: #ffffff;
+
+  /* elevation */
+  --shadow-sheet: 0 16px 36px rgb(0 0 0 / 20%), 0 0 0 0.5px rgb(0 0 0 / 15%);
+  --shadow-alert: 0 24px 60px rgb(0 0 0 / 35%), 0 0 0 0.5px rgb(0 0 0 / 25%);
+  --shadow-toast: 0 10px 30px rgb(0 0 0 / 25%);
+  --shadow-badge: 0 1px 4px rgb(0 0 0 / 25%);
+
+  /* focus */
+  --focus-width: 2px;
+  --focus-offset: 2px;
+  --hairline: 1px;
+
+  /* type */
+  --font: Inter, 'Adwaita Sans', Cantarell, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --text-scale: 1;
+  --fs-title-2: calc(19px * var(--text-scale));
+  --lh-title-2: calc(24px * var(--text-scale));
+  --fs-title-3: calc(16px * var(--text-scale));
+  --lh-title-3: calc(21px * var(--text-scale));
+  --fs-headline: calc(13px * var(--text-scale));
+  --lh-headline: calc(17px * var(--text-scale));
+  --fs-body: calc(13px * var(--text-scale));
+  --lh-body: calc(18px * var(--text-scale));
+  --fs-callout: calc(14px * var(--text-scale));
+  --lh-callout: calc(20px * var(--text-scale));
+  --fs-subhead: calc(12.5px * var(--text-scale));
+  --lh-subhead: calc(18px * var(--text-scale));
+  --fs-footnote: calc(12px * var(--text-scale));
+  --lh-footnote: calc(16px * var(--text-scale));
+  --fs-caption: calc(11px * var(--text-scale));
+  --lh-caption: calc(14px * var(--text-scale));
+
+  /* spacing (4 px grid) */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-14: 56px;
+
+  /* radii */
+  --r-window: 12px;
+  --r-sheet: 14px;
+  --r-alert: 14px;
+  --r-button: 8px;
+  --r-field: 7px;
+  --r-folder: 22px;
+  --r-squircle: 22.5%;
+  --r-track: 3px;
+
+  /* sizes */
+  --hit-min: 44px;
+  --button-min: 36px;
+  --icon-dmg: 112px;
+  --col-dmg: 128px;
+
+  /* motion: easing + duration */
+  --ease-sheet: cubic-bezier(0.2, 0.9, 0.3, 1);
+  --ease-alert: cubic-bezier(0.2, 0.9, 0.3, 1.1);
+  --ease-pop: cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  --ease-fly: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring-back: cubic-bezier(0.3, 1.4, 0.5, 1);
+  --ease-rise: ease-out;
+  --dur-sheet: 260ms;
+  --dur-alert: 260ms;
+  --dur-pop: 560ms;
+  --dur-fly: 500ms;
+  --dur-gulp: 420ms;
+  --dur-gulp-delay: 320ms;
+  --dur-rise: 340ms;
+  --dur-toast: 340ms;
+  --dur-fade: 200ms;
+  --dur-hover: 140ms;
+  --dur-progress: 140ms;
+
+  /* motion: full animation shorthands (reduced variants swap these) */
+  --anim-sheet: sheet-down var(--dur-sheet) var(--ease-sheet) both;
+  --anim-alert: alert-in var(--dur-alert) var(--ease-alert) both;
+  --anim-pop: pop var(--dur-pop) var(--ease-pop) both;
+  --anim-rise: rise var(--dur-rise) var(--ease-rise) both;
+  --anim-toast: toast-in var(--dur-toast) var(--ease-alert) both;
+  --anim-fade: fade-in var(--dur-fade) ease-out both;
+  --anim-gulp: gulp var(--dur-gulp) ease-out var(--dur-gulp-delay);
+  --anim-spin: spin 700ms linear infinite;
+  --anim-indeterminate: indeterminate 1.3s ease-in-out infinite;
+  --anim-dash: dash 900ms linear infinite;
+
+  /* motion: transitions */
+  --tr-fly: transform var(--dur-fly) var(--ease-fly), opacity var(--dur-fly) ease-in;
+  --tr-spring-back: transform 360ms var(--ease-spring-back);
+  --tr-hover: background var(--dur-hover), transform 180ms var(--ease-sheet);
+  --tr-progress: width var(--dur-progress) linear;
+  --tr-disclosure: transform 180ms var(--ease-sheet);
+  --lift-scale: 1.06;
+  --hover-scale: 1.07;
+}
+
+:root[data-scheme='dark'] {
+  color-scheme: dark;
+
+  --accent: #0a84ff;
+  --window-bg: #1e1e20;
+  --titlebar-bg: #2a2a2d;
+  --surface: #2c2c30;
+  --separator: #3a3a3d;
+  --label: #f5f5f7;
+  --label-secondary: #a1a1a6;
+  --label-tertiary: #d1d1d6;
+  --glyph-muted: #636366;
+  --fill-secondary: #3a3a3d;
+  --fill-hover: rgb(255 255 255 / 10%);
+  --track: #3a3a3d;
+  --success: #32d74b;
+  --on-success: #0b2f14;
+  --danger: #ff453a;
+  --light-inactive: #4a4a4e;
+  --material-thin: rgb(40 40 44 / 72%);
+  --material-toast: rgb(44 44 48 / 94%);
+  --alert-bg: #2c2c30;
+  --dim-sheet: rgb(30 30 32 / 55%);
+  --dim-modal: rgb(0 0 0 / 45%);
+  --icon-shadow: drop-shadow(0 4px 6px rgb(0 0 0 / 40%));
+  --icon-shadow-lifted: drop-shadow(0 14px 18px rgb(0 0 0 / 55%));
+  --folder-top: #2f7bd0;
+  --folder-body: #4a98e6;
+  --folder-mark: #245fa6;
+  --shadow-sheet: 0 16px 36px rgb(0 0 0 / 50%), 0 0 0 0.5px rgb(255 255 255 / 10%);
+  --shadow-alert: 0 24px 60px rgb(0 0 0 / 60%), 0 0 0 0.5px rgb(255 255 255 / 12%);
+  --shadow-toast: 0 10px 30px rgb(0 0 0 / 50%);
+}
+
+/* High contrast: strong separators, opaque materials, thicker focus ring. */
+:root[data-contrast='more'] {
+  --separator: var(--label-secondary);
+  --material-thin: var(--window-bg);
+  --material-toast: var(--window-bg);
+  --material-blur: none;
+  --focus-width: 3px;
+  --hairline: 2px;
+}
+
+/*
+ * Reduced motion: springs, flights and pops become 120 ms cross-fades.
+ * The same block is applied for the OS media query unless the app says
+ * data-motion="full" explicitly.
+ */
+:root[data-motion='reduce'] {
+  --dur-fade: 120ms;
+  --anim-sheet: fade-in 120ms linear both;
+  --anim-alert: fade-in 120ms linear both;
+  --anim-pop: fade-in 120ms linear both;
+  --anim-rise: fade-in 120ms linear both;
+  --anim-toast: fade-in 120ms linear both;
+  --anim-fade: fade-in 120ms linear both;
+  --anim-gulp: none;
+  --anim-spin: pulse 1.2s ease-in-out infinite;
+  --anim-indeterminate: pulse 1.2s ease-in-out infinite;
+  --anim-dash: none;
+  --tr-fly: opacity 120ms linear;
+  --tr-spring-back: none;
+  --tr-hover: background 120ms linear;
+  --tr-progress: none;
+  --tr-disclosure: none;
+  --lift-scale: 1;
+  --hover-scale: 1;
+  --dur-fly: 120ms;
+  --dur-gulp-delay: 0ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion='full']) {
+    --dur-fade: 120ms;
+    --anim-sheet: fade-in 120ms linear both;
+    --anim-alert: fade-in 120ms linear both;
+    --anim-pop: fade-in 120ms linear both;
+    --anim-rise: fade-in 120ms linear both;
+    --anim-toast: fade-in 120ms linear both;
+    --anim-fade: fade-in 120ms linear both;
+    --anim-gulp: none;
+    --anim-spin: pulse 1.2s ease-in-out infinite;
+    --anim-indeterminate: pulse 1.2s ease-in-out infinite;
+    --anim-dash: none;
+    --tr-fly: opacity 120ms linear;
+    --tr-spring-back: none;
+    --tr-hover: background 120ms linear;
+    --tr-progress: none;
+    --tr-disclosure: none;
+    --lift-scale: 1;
+    --hover-scale: 1;
+    --dur-fly: 120ms;
+    --dur-gulp-delay: 0ms;
+  }
+}
