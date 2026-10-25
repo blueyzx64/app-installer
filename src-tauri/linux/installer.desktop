@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Installer
+Comment=Install apps by dragging them to Applications
+Exec={{exec}} %f
+Icon={{icon}}
+Terminal=false
+Categories=System;PackageManager;
+MimeType=application/x-rpm;application/x-redhat-package-manager;application/vnd.appimage;application/x-iso9660-appimage;
+StartupNotify=true

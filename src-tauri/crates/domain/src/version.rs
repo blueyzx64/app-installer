@@ -309,3 +309,54 @@ mod tests {
         assert_eq!(back.as_str(), "1.2.3");
     }
 }
+
+#[cfg(test)]
+mod prop {
+    use super::*;
+    use proptest::prelude::*;
+
+    fn any_version() -> impl Strategy<Value = String> {
+        "[0-9a-z.~^_+-]{0,12}"
+    }
+
+    fn evr_part() -> impl Strategy<Value = String> {
+        "[0-9a-z.~^_-]{1,12}"
+    }
+
+    proptest! {
+        #[test]
+        fn prop_antisymmetric(a in any_version(), b in any_version()) {
+            let (va, vb) = (Version::new(a), Version::new(b));
+            prop_assert_eq!(va.cmp(&vb), vb.cmp(&va).reverse());
+        }
+
+        #[test]
+        fn prop_reflexive(a in any_version()) {
+            let va = Version::new(a);
+            prop_assert_eq!(&va, &va);
+            prop_assert_eq!(va.cmp(&va), Ordering::Equal);
+        }
+
+        #[test]
+        fn prop_transitive(a in any_version(), b in any_version(), c in any_version()) {
+            let (va, vb, vc) = (Version::new(a), Version::new(b), Version::new(c));
+            if va <= vb && vb <= vc {
+                prop_assert!(va <= vc);
+            }
+        }
+
+        #[test]
+        fn prop_epoch_dominates(x in evr_part(), y in evr_part()) {
+            let newer = Version::new(format!("1:{x}"));
+            let older = Version::new(format!("0:{y}"));
+            prop_assert!(newer > older, "{newer} should beat {older}");
+        }
+
+        #[test]
+        fn prop_appending_dot_one_is_greater(parts in proptest::collection::vec(0u32..1_000_000, 1..=4)) {
+            let base = parts.iter().map(u32::to_string).collect::<Vec<_>>().join(".");
+            let longer = format!("{base}.1");
+            prop_assert!(Version::new(longer.clone()) > Version::new(base.clone()), "{longer} vs {base}");
+        }
+    }
+}

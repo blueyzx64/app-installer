@@ -5,69 +5,116 @@ import { invoke as __TAURI_INVOKE, Channel } from "@tauri-apps/api/core";
 /** Commands */
 export const commands = {
 	/**  The path from argv on first launch. Consumed once. */
-	takeLaunchFile: () => typedError<string | null, CommandError_Serialize>(__TAURI_INVOKE("take_launch_file")),
+	takeLaunchFile: () => __TAURI_INVOKE<string | null>("take_launch_file"),
+	/**  Parses only. The preview is stored server-side under its `id`. */
+	openPackage: (path: string) => __TAURI_INVOKE<PackagePreview>("open_package", { path }),
 	/**
-	 *  SPIKE STUB (ADR-0009): proves a `Channel` argument survives code generation.
-	 *  Replaced by the real use case call when the application crate lands.
+	 *  Streams progress over `on_event`; resolves when finished.
+	 *  Failures and cancels are outcomes, not errors.
 	 */
-	install: (previewId: string, onEvent: Channel<InstallEventDto_Deserialize>) => typedError<InstallOutcomeDto_Serialize, CommandError_Serialize>(__TAURI_INVOKE("install", { previewId, onEvent })),
+	install: (previewId: string, onEvent: Channel<InstallEvent>) => __TAURI_INVOKE<InstallOutcome>("install", { previewId, onEvent }),
+	/**  Best effort. A preview that is not installing is ignored. */
+	cancelInstall: (previewId: string) => __TAURI_INVOKE<null>("cancel_install", { previewId }),
+	listInstalled: () => __TAURI_INVOKE<InstalledApp[]>("list_installed"),
+	/**  System packages prompt through polkit; cancelling is an outcome. */
+	uninstall: (appId: string, onEvent: Channel<InstallEvent>) => __TAURI_INVOKE<UninstallOutcome>("uninstall", { appId, onEvent }),
+	launchApp: (appId: string) => __TAURI_INVOKE<null>("launch_app", { appId }),
+	defaultHandlerStatus: () => __TAURI_INVOKE<DefaultStatus>("default_handler_status"),
+	/**  Makes this app the default for all supported MIME types. */
+	makeDefaultHandler: () => __TAURI_INVOKE<null>("make_default_handler"),
+	/**  Remembers "Not Now". */
+	dismissDefaultPrompt: () => __TAURI_INVOKE<null>("dismiss_default_prompt"),
+	getAppearance: () => __TAURI_INVOKE<Appearance>("get_appearance"),
 };
 
 /* Types */
-/**
- *  Serializable command failure: `{ code, detail }`.
- * 
- *  `detail` is technical text for logs and the optional "Details" disclosure.
- *  It is never shown as a sentence.
- */
-export type CommandError = CommandError_Serialize | CommandError_Deserialize;
+export type AppSource = "appImage" | "systemPackage";
 
-/**
- *  Serializable command failure: `{ code, detail }`.
- * 
- *  `detail` is technical text for logs and the optional "Details" disclosure.
- *  It is never shown as a sentence.
- */
-export type CommandError_Deserialize = {
-	code: ErrorCode,
-	detail?: string | null,
+export type Appearance = {
+	colorScheme: ColorScheme,
+	/**  `#RRGGBB` from the portal, or null for the default blue. */
+	accent: string | null,
+	highContrast: boolean,
+	reducedMotion: boolean,
+	controls: WindowControls,
 };
 
+export type ColorScheme = "light" | "dark";
+
 /**
  *  Serializable command failure: `{ code, detail }`.
  * 
  *  `detail` is technical text for logs and the optional "Details" disclosure.
  *  It is never shown as a sentence.
  */
-export type CommandError_Serialize = {
+export type CommandError = {
 	code: ErrorCode,
 	detail: string | null,
+};
+
+export type Compatibility = { kind: "ok" } | { kind: "wrongFamily"; madeFor: MadeFor } | { kind: "wrongArch"; packageArch: string; hostArch: string } | { kind: "alreadyInstalled"; relation: VersionRelation; installedVersion: string } | { kind: "missingRuntime"; what: Runtime } | { kind: "unsupported"; reason: UnsupportedReason };
+
+export type ControlButton = "close" | "minimize" | "maximize";
+
+export type ControlSide = "left" | "right";
+
+export type DefaultStatus = {
+	isDefault: boolean,
+	askedBefore: boolean,
 };
 
 /**  Stable error codes. Keep in sync with `docs/architecture/ipc-contract.md`. */
 export type ErrorCode = "permissionDenied" | "offline" | "missingDependencies" | "conflicts" | "notEnoughSpace" | "corruptFile" | "untrustedSource" | "backendUnavailable" | "notFound" | "busy" | "unknown";
 
-export type InstallEventDto = InstallEventDto_Serialize | InstallEventDto_Deserialize;
+export type InstallEvent = { kind: "plan"; extraPackages: number; downloadBytes: number } | { kind: "progress"; phase: InstallPhase; percent: number | null; etaSecs: number | null };
 
-export type InstallEventDto_Deserialize = { kind: "plan"; extraPackages: number; downloadBytes: number } | { kind: "progress"; phase: InstallPhaseDto; percent?: number | null; etaSecs?: number | null };
+export type InstallOutcome = { kind: "installed"; app: InstalledApp } | { kind: "cancelled" } | { kind: "failed"; code: ErrorCode; detail: string | null };
 
-export type InstallEventDto_Serialize = { kind: "plan"; extraPackages: number; downloadBytes: number } | { kind: "progress"; phase: InstallPhaseDto; percent: number | null; etaSecs: number | null };
+export type InstallPhase = "preparing" | "waitingForPermission" | "downloading" | "installing" | "finishing";
 
-export type InstallOutcomeDto = InstallOutcomeDto_Serialize | InstallOutcomeDto_Deserialize;
+export type InstallScope = "system" | "user";
 
-export type InstallOutcomeDto_Deserialize = { kind: "cancelled" } | { kind: "failed"; code: ErrorCode; detail?: string | null };
+export type InstalledApp = {
+	id: string,
+	displayName: string,
+	version: string,
+	iconDataUrl: string | null,
+	source: AppSource,
+	/**  ISO-8601, UTC. */
+	installedAt: string,
+	canLaunch: boolean,
+};
 
-export type InstallOutcomeDto_Serialize = { kind: "cancelled" } | { kind: "failed"; code: ErrorCode; detail: string | null };
+/**  Which distro family a package was built for. */
+export type MadeFor = "rpmBased" | "debBased";
 
-export type InstallPhaseDto = "preparing" | "waitingForPermission" | "downloading" | "installing" | "finishing";
+export type PackageFormat = "rpm" | "deb" | "appImage";
 
-/* Tauri Specta runtime */
-async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {
-    try {
-        return { status: "ok", data: await result };
-    } catch (e) {
-        if (e instanceof Error) throw e;
-        return { status: "error", error: e as any };
-    }
-}
+export type PackagePreview = {
+	id: string,
+	/**  Machine name, e.g. `lumen-notes`. */
+	name: string,
+	format: PackageFormat,
+	displayName: string,
+	version: string,
+	summary: string | null,
+	iconDataUrl: string | null,
+	sizeBytes: number,
+	scope: InstallScope,
+	needsPermission: boolean,
+	compat: Compatibility,
+};
+
+export type Runtime = "fuse2";
+
+export type UninstallOutcome = { kind: "removed" } | { kind: "cancelled" } | { kind: "failed"; code: ErrorCode; detail: string | null };
+
+export type UnsupportedReason = "appImageType1" | "dwarfs" | "unknownFormat";
+
+export type VersionRelation = "same" | "older" | "newer";
+
+export type WindowControls = {
+	side: ControlSide,
+	buttons: ControlButton[],
+};
 

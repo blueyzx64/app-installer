@@ -141,6 +141,8 @@ Rules that live in the domain as pure functions, each with unit tests:
 - `AppId::from_name(display_name)`: a slug that is safe in file names and desktop IDs
 - Error classification: what a user can do about each error (retry, cancel, get help)
 
+> **As built (W0, decision D-011):** `PackageMetadata` also carries `format` and `needs_fuse2`. `InstalledApp` also carries `name` (machine name) and `path`, and `installed_at` is Unix seconds (ISO-8601 on the wire). `InstallError` adds `Cancelled`, `NotFound` and `Busy`. `Compatibility` adds `Unsupported(reason)`. The code in `installer-domain` is authoritative.
+
 ## 6. Application layer: use cases and ports
 
 ### Use cases (`installer-application/src/use_cases/`)
@@ -189,6 +191,8 @@ pub trait AppLedger { /* record/forget/list apps installed through us (JSON) */ 
 pub trait Launcher { /* launch a desktop id */ }
 pub trait AppearanceSource { /* snapshot + change stream */ }
 ```
+
+> **As built (W0, D-011):** extra ports `FileProbe` (reads the file head for sniffing) and `Clock`; `InstallObserver::on_plan(&InstallPlan)`; `DefaultHandlerRegistry::dismiss_prompt`. Async ports use native `async fn` + `trait_variant::make(Send)` and are used through generics, not `dyn` (see the `rust-clean-architecture` skill). `CancelToken` is `tokio_util::sync::CancellationToken`.
 
 > Async traits: use native `async fn` in traits together with `trait_variant::make(Send)`. Fall back to `#[async_trait]` only where you need `dyn Trait` objects of async traits. Pick one approach and keep to it; document the choice in the skill [`rust-clean-architecture`](../../.claude/skills/rust-clean-architecture/SKILL.md).
 

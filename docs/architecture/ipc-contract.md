@@ -36,8 +36,9 @@ type PackageFormat = 'rpm' | 'deb' | 'appImage';
 type InstallScope = 'system' | 'user';
 
 interface PackagePreview {
-  id: string;
+  id: string;                      // "p<n>"
   format: PackageFormat;
+  name: string;                    // machine name, e.g. lumen-notes
   displayName: string;
   version: string;
   summary: string | null;
@@ -82,6 +83,15 @@ type ErrorCode =
   | 'notEnoughSpace' | 'corruptFile' | 'untrustedSource' | 'backendUnavailable'
   | 'notFound' | 'busy' | 'unknown';
 
+type UninstallOutcome =
+  | { kind: 'removed' }
+  | { kind: 'cancelled' }
+  | { kind: 'failed'; code: ErrorCode; detail: string | null };
+
+interface DefaultStatus { isDefault: boolean; askedBefore: boolean; }
+
+// Every command rejects with a CommandError (the generated wrappers throw it; they return
+// plain Promise<T>). A cancel is never an error: it is an outcome with kind 'cancelled'.
 interface CommandError { code: ErrorCode; detail: string | null; }
 
 interface Appearance {
