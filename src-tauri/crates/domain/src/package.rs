@@ -259,3 +259,24 @@ mod tests {
         assert_eq!(format!("{icon:?}"), "IconData(Png, 3 bytes)");
     }
 }
+
+#[cfg(test)]
+mod prop {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn sniff_never_panics_and_rpm_needs_magic(
+            header in proptest::collection::vec(any::<u8>(), 0..128),
+            name_a in any::<String>(),
+            name_b in any::<String>(),
+        ) {
+            let fmt = PackageFormat::sniff(&header, &name_a);
+            if fmt == Some(PackageFormat::Rpm) {
+                prop_assert!(header.starts_with(&[0xED, 0xAB, 0xEE, 0xDB]));
+            }
+            prop_assert_eq!(fmt, PackageFormat::sniff(&header, &name_b));
+        }
+    }
+}

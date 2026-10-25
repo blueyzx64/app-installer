@@ -153,3 +153,26 @@ mod tests {
         assert!("".parse::<AppId>().is_err());
     }
 }
+
+#[cfg(test)]
+mod prop {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn slug_is_always_a_valid_id(chars in proptest::collection::vec(any::<char>(), 0..80)) {
+            let name: String = chars.into_iter().collect();
+            let id = AppId::from_name(&name);
+            let s = id.as_str();
+
+            prop_assert!(!s.is_empty());
+            prop_assert!(s.len() <= 64);
+            prop_assert!(s.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-'));
+            prop_assert!(!s.starts_with('-') && !s.ends_with('-'));
+            prop_assert!(!s.contains("--"));
+            prop_assert_eq!(AppId::from_name(s), id.clone());
+            prop_assert!(s.parse::<AppId>().is_ok());
+        }
+    }
+}
