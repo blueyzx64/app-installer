@@ -5,7 +5,7 @@
 //! scan of the cpio archive. Any failure there yields `icon: None`, never an error.
 
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Read};
+use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::Path;
 
 use installer_application::ports::PackageInspector;
@@ -18,6 +18,11 @@ use installer_domain::{
 const PAYLOAD_SCAN_CAP: u64 = 96 * 1024 * 1024;
 /// Most bytes lead + signature + header may span (real ones are well under 8 MiB).
 const HEADER_BYTES_MAX: u64 = 64 * 1024 * 1024;
+/// Most index entries one header may claim (D-039).
+const HEADER_ENTRIES_MAX: u32 = 65_536;
+const LEAD_LEN: u64 = 96;
+const RPM_LEAD_MAGIC: [u8; 4] = [0xED, 0xAB, 0xEE, 0xDB];
+const HEADER_MAGIC: [u8; 4] = [0x8E, 0xAD, 0xE8, 0x01];
 /// Largest single icon we keep.
 const ICON_MAX_BYTES: u64 = 2 * 1024 * 1024;
 /// Longest file name we accept inside the cpio archive.
@@ -34,7 +39,11 @@ impl RpmInspector {
 
     /// Blocking worker behind [`PackageInspector::inspect`]. Public for tests and benches.
     pub fn inspect_path(path: &Path, with_icon: bool) -> Result<PackageMetadata, InspectError> {
-        let file = File::open(path).map_err(map_io)?;
+        let mut file = File::open(path).map_err(map_io)?;
+        let file_len = file.metadata().map_err(map_io)?.len();
+        // D-039: the crate allocates from the sizes the file claims; vet them first.
+        validate_header_sizes(&mut file, file_len)?;
+        file.rewind().map_err(map_io)?;
         let mut reader = BufReader::new(file);
         // Cap header reads: the crate trusts the sizes in the file. Hitting the cap is a short read.
         let parsed = {
@@ -85,6 +94,49 @@ impl RpmInspector {
             needs_fuse2: false,
         })
     }
+}
+
+/// D-039: check the lead magic and both header intros (magic, entry count, data
+/// length; big-endian u32) against hard caps and the real file size, with checked
+/// arithmetic, before the `rpm` crate sizes any buffer from them.
+fn validate_header_sizes<R: Read + Seek>(r: &mut R, file_len: u64) -> Result<(), InspectError> {
+    let mut lead = [0u8; LEAD_LEN as usize];
+    r.read_exact(&mut lead).map_err(map_io)?;
+    if lead[..4] != RPM_LEAD_MAGIC {
+        return Err(InspectError::Corrupt);
+    }
+    let mut offset = LEAD_LEN;
+    for is_signature in [true, false] {
+        r.seek(SeekFrom::Start(offset)).map_err(map_io)?;
+        let mut intro = [0u8; 16];
+        r.read_exact(&mut intro).map_err(map_io)?;
+        if intro[..4] != HEADER_MAGIC {
+            return Err(InspectError::Corrupt);
+        }
+        let be =
+            |i: usize| u32::from_be_bytes([intro[i], intro[i + 1], intro[i + 2], intro[i + 3]]);
+        let (entries, data_len) = (be(8), be(12));
+        if entries > HEADER_ENTRIES_MAX || u64::from(data_len) > HEADER_BYTES_MAX {
+            return Err(InspectError::Corrupt);
+        }
+        let body = u64::from(entries)
+            .checked_mul(16)
+            .and_then(|n| n.checked_add(u64::from(data_len)))
+            .filter(|n| *n <= HEADER_BYTES_MAX)
+            .ok_or(InspectError::Corrupt)?;
+        let end = offset
+            .checked_add(16)
+            .and_then(|n| n.checked_add(body))
+            .filter(|end| *end <= file_len)
+            .ok_or(InspectError::Corrupt)?;
+        // The signature header is padded to an 8-byte boundary.
+        offset = if is_signature {
+            end.next_multiple_of(8)
+        } else {
+            end
+        };
+    }
+    Ok(())
 }
 
 impl PackageInspector for RpmInspector {
