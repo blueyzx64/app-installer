@@ -53,11 +53,11 @@
   .alert {
     width: var(--w-alert);
     max-width: calc(100% - 2 * var(--sp-4));
-    padding: var(--sp-6) var(--sp-5) 18px;
+    padding: var(--sp-6) var(--sp-5) var(--sp-4h);
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 14px;
+    gap: var(--sp-3h);
     text-align: center;
     background: var(--alert-bg);
     border-radius: var(--r-alert);
@@ -73,7 +73,7 @@
     font-weight: 700;
   }
   p {
-    margin-top: 6px;
+    margin-top: var(--sp-1h);
     font-size: var(--fs-footnote);
     line-height: var(--lh-footnote);
     color: var(--label-secondary);

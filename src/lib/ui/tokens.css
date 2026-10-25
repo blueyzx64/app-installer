@@ -84,11 +84,16 @@
   --sp-6: 24px;
   --sp-8: 32px;
   --sp-14: 56px;
+  --sp-half: 2px;
+  --sp-1h: 6px;
+  --sp-3h: 14px;
+  --sp-4h: 18px;
 
   /* radii */
   --r-window: 12px;
   --r-sheet: 14px;
   --r-alert: 14px;
+  --r-toast: 14px;
   --r-button: 8px;
   --r-field: 7px;
   --r-folder: 22px;
@@ -109,6 +114,10 @@
   --w-button-min: calc(88px * var(--text-scale, 1));
   --gap-row: 10px;
   --gap-view: 34px;
+  --w-dmg-arrow: 120px;
+  /* Toast sits just under the 40 px title bar. */
+  --toast-top: 36px;
+  --toast-inset: 14px;
 
   /* motion: easing + duration */
   --ease-sheet: cubic-bezier(0.2, 0.9, 0.3, 1);

@@ -120,7 +120,7 @@
     white-space: nowrap;
   }
   .arrow {
-    width: 120px;
+    width: var(--w-dmg-arrow);
     height: var(--icon-dmg);
     display: flex;
     align-items: center;

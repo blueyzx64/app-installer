@@ -40,16 +40,16 @@
 <style>
   .toast {
     position: absolute;
-    top: 36px;
-    right: 14px;
+    top: var(--toast-top);
+    right: var(--toast-inset);
     z-index: 5;
     width: var(--w-toast);
-    max-width: calc(100% - 28px);
-    padding: 12px 14px;
+    max-width: calc(100% - 2 * var(--toast-inset));
+    padding: var(--sp-3) var(--sp-3h);
     display: flex;
     align-items: flex-start;
     gap: var(--sp-3);
-    border-radius: 14px;
+    border-radius: var(--r-toast);
     background: var(--material-toast);
     -webkit-backdrop-filter: var(--material-blur);
     backdrop-filter: var(--material-blur);
@@ -69,7 +69,7 @@
     font-weight: 700;
   }
   .body {
-    margin-top: 2px;
+    margin-top: var(--sp-half);
     font-size: var(--fs-footnote);
     line-height: var(--lh-footnote);
     color: var(--label-secondary);
