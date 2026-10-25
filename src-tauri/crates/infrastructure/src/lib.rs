@@ -16,12 +16,16 @@
 //! Never depend on `tauri` here. Never execute a package (ADR-0005).
 #![forbid(unsafe_code)]
 
+pub mod appimage_store; // lane S3
 pub mod defaults; // lane S3b
+pub mod desktop_entries; // lane S3
 pub mod file_probe;
 pub mod host;
 pub mod inspect;
+pub mod launcher; // lane S3
+pub mod ledger; // lane S3
+pub mod packagekit; // lane S2
 
 // lane S2c
 #[cfg(feature = "dnf5daemon")]
 pub mod dnf5daemon;
-pub mod packagekit; // lane S2

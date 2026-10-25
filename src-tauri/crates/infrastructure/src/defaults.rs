@@ -48,7 +48,7 @@ impl MimeDefaults for GioMimeDefaults {
 
     fn set_default(&self, desktop_id: &str, mime: &str) -> Result<(), BackendError> {
         use gio::prelude::AppInfoExt;
-        let app = gio::DesktopAppInfo::new(desktop_id).ok_or_else(|| {
+        let app = gio_unix::DesktopAppInfo::new(desktop_id).ok_or_else(|| {
             BackendError::Unavailable(format!("desktop entry {desktop_id} not found"))
         })?;
         app.set_as_default_for_type(mime)
