@@ -17,6 +17,12 @@ import type {
   LibraryGateway,
   WindowGateway
 } from '../../core/ports';
+// lane S13
+import {
+  createMockDefaults,
+  defaultScenarioFromLocation,
+  defaultStatusFor
+} from './defaults-gateway';
 import {
   LUMEN_FILES,
   formatForScenario,
@@ -106,7 +112,7 @@ export function createMockGateways(options: MockOptions = {}): MockGateways {
       : override.none || scenario === 'empty-library'
         ? null
         : (override.file ?? LUMEN_FILES[formatForScenario(scenario)]);
-  const defaultStatus: DefaultStatus = { isDefault: false, askedBefore: false };
+  const defaultStatus: DefaultStatus = defaultStatusFor(defaultScenarioFromLocation()); // lane S13
   let appearance: Appearance = {
     colorScheme: 'light',
     accent: null,
@@ -200,18 +206,7 @@ export function createMockGateways(options: MockOptions = {}): MockGateways {
     }
   };
 
-  const defaults: DefaultsGateway = {
-    async status() {
-      return { ...defaultStatus };
-    },
-    async makeDefault() {
-      defaultStatus.isDefault = true;
-      defaultStatus.askedBefore = true;
-    },
-    async dismissPrompt() {
-      defaultStatus.askedBefore = true;
-    }
-  };
+  const defaults: DefaultsGateway = createMockDefaults(defaultStatus); // lane S13
 
   const appearanceGw: AppearanceGateway = {
     async get() {
