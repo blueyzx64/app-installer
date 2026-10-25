@@ -36,7 +36,7 @@
     animation: var(--anim-rise);
   }
   p {
-    max-width: 320px;
+    max-width: var(--w-copy-narrow);
     line-height: 1.5;
     color: var(--label-secondary);
     animation: var(--anim-rise);

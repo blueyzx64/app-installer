@@ -104,6 +104,12 @@
   --hit-min: 44px;
   --button-min: 36px;
   --icon-dmg: 112px;
+  /* lane S12: library grid */
+  --cell-library: 112px;
+  --icon-library: 72px;
+  --more-size: 28px;
+  --w-menu-min: calc(160px * var(--text-scale, 1));
+  --w-copy-narrow: calc(320px * var(--text-scale, 1));
   --col-dmg: calc(128px * var(--text-scale, 1));
   --w-copy: calc(380px * var(--text-scale, 1));
   --w-copy-wide: calc(420px * var(--text-scale, 1));
