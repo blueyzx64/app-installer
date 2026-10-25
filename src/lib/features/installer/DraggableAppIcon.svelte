@@ -80,13 +80,13 @@
     user-select: none;
     -webkit-user-select: none;
     filter: var(--icon-shadow);
-    transition: filter 200ms;
+    transition: filter var(--dur-fade);
     will-change: transform;
   }
   .icon.dragging {
     cursor: grabbing;
     filter: var(--icon-shadow-lifted);
-    transition: filter 150ms;
+    transition: filter var(--dur-fade);
   }
   .icon.flown {
     opacity: 0;
