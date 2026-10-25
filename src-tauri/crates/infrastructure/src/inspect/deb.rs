@@ -17,6 +17,8 @@ const AR_MAGIC: &[u8; 8] = b"!<arch>\n";
 const AR_HEADER_LEN: usize = 60;
 /// Largest compressed `control.tar.*` we read.
 const CONTROL_ARCHIVE_MAX: u64 = 8 * 1024 * 1024;
+/// Most bytes we inflate from `control.tar.*` (decompression-bomb guard).
+const CONTROL_TAR_INFLATED_MAX: u64 = 16 * 1024 * 1024;
 /// Largest decompressed `control` file we read.
 const CONTROL_FILE_MAX: u64 = 1024 * 1024;
 /// Members to look at before giving up (a real .deb has three).
@@ -145,7 +147,9 @@ fn decompress_control(member: &str, bytes: Vec<u8>) -> Result<Vec<u8>, InspectEr
         // bzip2 and friends: valid deb, but we do not read it.
         _ => return Err(InspectError::Unsupported(UnsupportedReason::UnknownFormat)),
     };
-    find_in_tar(reader, "control")
+    // Bound the inflated size: hitting the cap truncates the stream, which
+    // surfaces as a short read inside `find_in_tar` and so as `Corrupt`.
+    find_in_tar(reader.take(CONTROL_TAR_INFLATED_MAX), "control")
 }
 
 fn octal(field: &[u8]) -> Option<u64> {
