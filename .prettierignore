@@ -1,0 +1,13 @@
+node_modules
+build
+.svelte-kit
+pnpm-lock.yaml
+src-tauri
+docs
+design
+.claude
+README.md
+CLAUDE.md
+start-workflow.md
+src/lib/infrastructure/tauri/bindings.ts
+.github
