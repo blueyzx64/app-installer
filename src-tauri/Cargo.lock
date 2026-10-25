@@ -1806,8 +1806,12 @@ dependencies = [
 name = "installer-infrastructure"
 version = "0.1.0"
 dependencies = [
+ "gio",
  "installer-application",
  "installer-domain",
+ "serde_json",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]
