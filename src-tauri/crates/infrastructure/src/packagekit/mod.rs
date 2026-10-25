@@ -3,6 +3,12 @@
 //! One transaction per operation. polkit asks for permission itself
 //! (ADR-0007); we never see a password. A dismissed dialog is a cancel.
 //!
+//! Targets PackageKit 1.x (bus name `org.freedesktop.PackageKit`). The 2.0 line
+//! renames bus, interface and path to `org.freedesktop.packagekit1` and changes
+//! SetHints, InstallFiles and the Package signal; `is_available()` then says
+//! false, so we degrade to "backend unavailable" instead of misbehaving.
+//! HUMAN: when Fedora ships PackageKit 2.0, port the proxies (new ADR).
+//!
 //! - `enums`        wire values (⚠ verify against pk-enum.h)
 //! - `mapping`      pure fns: status/error/exit/plan mapping
 //! - `transaction`  `PkBus`/`PkTransaction` traits and the driver
@@ -20,13 +26,17 @@ use installer_application::CancelToken;
 use installer_application::ports::{InstallObserver, SystemPackages};
 use installer_domain::{BackendError, InstallError, InstallPlan, PackageFile, Version};
 
-use enums::{filter, flag};
+use enums::{PkInfo, filter, flag};
 use mapping::{PackageId, backend_error, call_error_to_install};
 use proxy::SystemBus;
 use transaction::{CallError, PkBus, PkOp, TxReport, run};
 
 pub struct PackageKitSystemPackages<B: PkBus = SystemBus> {
     bus: B,
+    /// Paths whose simulated install showed they are not signed by a trusted
+    /// repo: install them straight without `ONLY_TRUSTED`, so the person sees
+    /// one permission prompt and not two (D-036).
+    untrusted: std::sync::Mutex<std::collections::HashSet<String>>,
 }
 
 impl PackageKitSystemPackages<SystemBus> {
@@ -54,7 +64,10 @@ fn path_str(file: &PackageFile) -> Result<String, InstallError> {
 
 impl<B: PkBus> PackageKitSystemPackages<B> {
     pub fn with_bus(bus: B) -> Self {
-        Self { bus }
+        Self {
+            bus,
+            untrusted: Default::default(),
+        }
     }
 
     /// Is PackageKit on the system bus (running or activatable)?
@@ -62,14 +75,30 @@ impl<B: PkBus> PackageKitSystemPackages<B> {
         self.bus.is_available().await
     }
 
-    /// Run a read-only or simulated operation without progress.
-    async fn query(&self, op: PkOp) -> Result<TxReport, BackendError> {
+    /// Run a read-only or simulated operation without progress. The report is
+    /// returned even when the transaction failed.
+    async fn query_report(&self, op: PkOp) -> Result<TxReport, BackendError> {
         let tx = self.bus.begin().await?;
-        let report = run(&tx, op, None, &CancelToken::new())
+        run(&tx, op, None, &CancelToken::new())
             .await
-            .map_err(|e| backend_error(install_err(e)))?;
+            .map_err(|e| backend_error(install_err(e)))
+    }
+
+    /// Like `query_report`, but a failed transaction is an error.
+    async fn query(&self, op: PkOp) -> Result<TxReport, BackendError> {
+        let report = self.query_report(op).await?;
         report.result().map_err(backend_error)?;
         Ok(report)
+    }
+
+    fn is_untrusted(&self, path: &str) -> bool {
+        self.untrusted.lock().is_ok_and(|s| s.contains(path))
+    }
+
+    fn mark_untrusted(&self, path: &str) {
+        if let Ok(mut s) = self.untrusted.lock() {
+            s.insert(path.to_owned());
+        }
     }
 
     /// Installed package ids for `name` (any arch/version).
@@ -96,7 +125,11 @@ impl<B: PkBus> PackageKitSystemPackages<B> {
         observer: &dyn InstallObserver,
         cancel: &CancelToken,
     ) -> Result<(), InstallError> {
-        let mut flags = flag::ONLY_TRUSTED;
+        let mut flags = if self.is_untrusted(&path) {
+            flag::NONE
+        } else {
+            flag::ONLY_TRUSTED
+        };
         loop {
             let tx = self.bus.begin().await.map_err(InstallError::from)?;
             let report = run(
@@ -116,6 +149,9 @@ impl<B: PkBus> PackageKitSystemPackages<B> {
                     report.error.as_ref().map(|(c, _)| *c),
                 );
             if retry {
+                if cancel.is_cancelled() {
+                    return Err(InstallError::Cancelled);
+                }
                 flags = flag::NONE;
                 continue;
             }
@@ -142,12 +178,30 @@ impl<B: PkBus> SystemPackages for PackageKitSystemPackages<B> {
 
     async fn plan(&self, file: &PackageFile) -> Result<InstallPlan, BackendError> {
         let path = path_str(file).map_err(backend_error)?;
-        let report = self
-            .query(PkOp::InstallFiles {
-                flags: flag::SIMULATE,
-                paths: vec![path],
+        // SIMULATE | ONLY_TRUSTED: the daemon reports an untrusted file up
+        // front (Info UNTRUSTED, or a missing-signature failure), so install can
+        // skip the trusted attempt (dnf5 backend comment, D-036).
+        let mut report = self
+            .query_report(PkOp::InstallFiles {
+                flags: flag::SIMULATE | flag::ONLY_TRUSTED,
+                paths: vec![path.clone()],
             })
             .await?;
+        let untrusted = report.packages.iter().any(|p| p.info == PkInfo::Untrusted)
+            || mapping::should_retry_untrusted(report.exit, report.error.as_ref().map(|(c, _)| *c));
+        if untrusted {
+            self.mark_untrusted(&path);
+            if report.result().is_err() {
+                // Plan again without the trust check to learn what it pulls in.
+                report = self
+                    .query(PkOp::InstallFiles {
+                        flags: flag::SIMULATE,
+                        paths: vec![path],
+                    })
+                    .await?;
+            }
+        }
+        report.result().map_err(backend_error)?;
         let extras = mapping::extra_install_ids(&report.packages);
         let mut bytes = 0u64;
         if !extras.is_empty() {
@@ -184,7 +238,7 @@ impl<B: PkBus> SystemPackages for PackageKitSystemPackages<B> {
                 autoremove: true,
             })
             .await?;
-        Ok(mapping::extra_removals(&report.packages))
+        Ok(mapping::extra_removals(&report.packages, &ids))
     }
 
     async fn remove(&self, name: &str, observer: &dyn InstallObserver) -> Result<(), InstallError> {
@@ -307,7 +361,7 @@ mod tests {
         assert_eq!(
             sim.ops(),
             vec![PkOp::InstallFiles {
-                flags: flag::SIMULATE,
+                flags: flag::SIMULATE | flag::ONLY_TRUSTED,
                 paths: vec!["/tmp/a.rpm".into()]
             }]
         );
@@ -331,6 +385,39 @@ mod tests {
         let plan = sys(vec![sim]).plan(&file()).await.unwrap();
         assert_eq!(plan.extra_packages, 1);
         assert_eq!(plan.download_bytes, 0);
+    }
+
+    #[tokio::test]
+    async fn untrusted_plan_makes_install_skip_trusted_attempt() {
+        let sim_trusted = FakeTx::new(vec![
+            err(PkError::MissingGpgSignature),
+            finished(PkExit::Failed),
+        ]);
+        let sim_plain = FakeTx::new(vec![
+            pkg(PkInfo::Installing, "app;1;x86_64;@commandline"),
+            finished(PkExit::Success),
+        ]);
+        let install = FakeTx::new(install_script());
+        let s = sys(vec![sim_trusted, sim_plain.clone(), install.clone()]);
+        let plan = s.plan(&file()).await.unwrap();
+        assert_eq!(plan.extra_packages, 0);
+        assert_eq!(
+            sim_plain.ops(),
+            vec![PkOp::InstallFiles {
+                flags: flag::SIMULATE,
+                paths: vec!["/tmp/a.rpm".into()]
+            }]
+        );
+        s.install(&file(), &RecordingObserver::default(), CancelToken::new())
+            .await
+            .unwrap();
+        assert_eq!(
+            install.ops(),
+            vec![PkOp::InstallFiles {
+                flags: flag::NONE,
+                paths: vec!["/tmp/a.rpm".into()]
+            }]
+        );
     }
 
     #[tokio::test]
@@ -557,3 +644,6 @@ mod tests {
         assert!(!PackageKitSystemPackages::with_bus(bus).is_available().await);
     }
 }
+
+#[cfg(test)]
+mod review_r4;

@@ -11,9 +11,9 @@ pub fn status_to_phase(status: PkStatus) -> InstallPhase {
         WaitingForAuth => InstallPhase::WaitingForPermission,
         Download | DownloadRepository | DownloadPackagelist | DownloadFilelist
         | DownloadChangelog | DownloadGroup | DownloadUpdateinfo => InstallPhase::Downloading,
-        Install | Update | Remove | Run | Commit | TestCommit | CopyFiles | RunHook => {
-            InstallPhase::Installing
-        }
+        // Run/Setup/Query are NOT install: the daemon injects Run right after Setup,
+        // before Download (D-036).
+        Install | Update | Remove | Commit | TestCommit | CopyFiles => InstallPhase::Installing,
         Cleanup | Finished => InstallPhase::Finishing,
         _ => InstallPhase::Preparing,
     }
@@ -80,9 +80,9 @@ pub fn error_to_install(code: PkError, details: &str) -> InstallError {
 pub fn exit_to_result(exit: PkExit) -> Result<(), InstallError> {
     match exit {
         PkExit::Success => Ok(()),
-        PkExit::Cancelled | PkExit::CancelledPriority | PkExit::Killed => {
-            Err(InstallError::Cancelled)
-        }
+        PkExit::Cancelled | PkExit::CancelledPriority => Err(InstallError::Cancelled),
+        // The backend was killed: not a person cancelling (D-036).
+        PkExit::Killed => Err(InstallError::Unknown("killed".into())),
         PkExit::KeyRequired | PkExit::NeedUntrusted | PkExit::EulaRequired => {
             Err(InstallError::UntrustedSource)
         }
@@ -174,7 +174,7 @@ impl PackageId {
 
     /// A package id of a local file carries `local` (or `local:...`) as data. ⚠ verify on Fedora.
     pub fn is_local(&self) -> bool {
-        self.data == "local" || self.data.starts_with("local:")
+        self.data == "local" || self.data.starts_with("local:") || self.data == "@commandline"
     }
 }
 
@@ -188,7 +188,12 @@ pub struct PkPackage {
 fn adds(info: PkInfo) -> bool {
     matches!(
         info,
-        PkInfo::Installing | PkInfo::Updating | PkInfo::Reinstalling | PkInfo::Downgrading
+        PkInfo::Installing
+            | PkInfo::Install
+            | PkInfo::Updating
+            | PkInfo::Reinstalling
+            | PkInfo::Downgrading
+            | PkInfo::Downgrade
     )
 }
 
@@ -225,10 +230,20 @@ pub fn plan_from_simulation(pkgs: &[PkPackage], download_bytes: u64) -> InstallP
     }
 }
 
-/// Extra removals of a simulated remove: every `Removing` package except the app itself.
-pub fn extra_removals(pkgs: &[PkPackage]) -> u32 {
-    let n = pkgs.iter().filter(|p| p.info == PkInfo::Removing).count();
-    u32::try_from(n.saturating_sub(1)).unwrap_or(u32::MAX)
+/// Packages a simulated remove would take along besides the app itself:
+/// distinct names that are not one of `targets` (so other arches of the app do
+/// not count). dnf5 also removes dependants; they are real extra removals.
+pub fn extra_removals(pkgs: &[PkPackage], targets: &[PackageId]) -> u32 {
+    let mut names: Vec<String> = pkgs
+        .iter()
+        .filter(|p| matches!(p.info, PkInfo::Removing | PkInfo::Remove))
+        .filter_map(|p| PackageId::parse(&p.id))
+        .map(|id| id.name)
+        .filter(|n| !targets.iter().any(|t| &t.name == n))
+        .collect();
+    names.sort();
+    names.dedup();
+    u32::try_from(names.len()).unwrap_or(u32::MAX)
 }
 
 #[cfg(test)]
@@ -245,7 +260,8 @@ mod tests {
             (S::DownloadPackagelist, Downloading),
             (S::Install, Installing),
             (S::Commit, Installing),
-            (S::Run, Installing),
+            (S::Run, Preparing),
+            (S::Query, Preparing),
             (S::Remove, Installing),
             (S::Cleanup, Finishing),
             (S::Finished, Finishing),
@@ -445,16 +461,31 @@ mod tests {
 
     #[test]
     fn removal_extras() {
-        assert_eq!(extra_removals(&[]), 0);
-        assert_eq!(extra_removals(&[p(PkInfo::Removing, "a;1;x;i")]), 0);
+        let app = [PackageId::parse("a;1;x86_64;installed").unwrap()];
+        assert_eq!(extra_removals(&[], &app), 0);
+        assert_eq!(extra_removals(&[p(PkInfo::Removing, "a;1;x;i")], &app), 0);
         assert_eq!(
-            extra_removals(&[
-                p(PkInfo::Removing, "a;1;x;i"),
-                p(PkInfo::Removing, "b;1;x;i"),
-                p(PkInfo::Removing, "c;1;x;i"),
-                p(PkInfo::Installed, "d;1;x;i"),
-            ]),
+            extra_removals(
+                &[
+                    p(PkInfo::Removing, "a;1;x;i"),
+                    p(PkInfo::Removing, "a;1;i686;i"), // other arch of the app
+                    p(PkInfo::Removing, "b;1;x;i"),
+                    p(PkInfo::Remove, "c;1;x;i"),
+                    p(PkInfo::Removing, "c;1;noarch;i"), // same extra, other arch
+                    p(PkInfo::Installed, "d;1;x;i"),
+                ],
+                &app
+            ),
             2
         );
+    }
+
+    #[test]
+    fn killed_is_failure_and_running_is_preparing() {
+        assert_eq!(
+            exit_to_result(PkExit::Killed),
+            Err(InstallError::Unknown("killed".into()))
+        );
+        assert_eq!(status_to_phase(PkStatus::Run), InstallPhase::Preparing);
     }
 }
