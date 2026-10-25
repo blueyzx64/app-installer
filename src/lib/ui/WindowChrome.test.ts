@@ -63,7 +63,15 @@ describe('WindowControls', () => {
     render(WindowControls, {
       props: { controls: { side: 'right', buttons: ['minimize', 'maximize'] } }
     });
-    expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+    const names = screen.getAllByRole('button').map((b) => b.getAttribute('aria-label'));
+    expect(names.at(-1)).toBe('Close');
+  });
+
+  // R8 reverify (D-032): on the left, close goes first, as the Rust parser inserts it at 0.
+  it('review_r8_left_side_close_added_first', () => {
+    render(WindowControls, { props: { controls: { side: 'left', buttons: ['minimize'] } } });
+    const names = screen.getAllByRole('button').map((b) => b.getAttribute('aria-label'));
+    expect(names[0]).toBe('Close');
   });
 
   it('marks unfocused windows', () => {
