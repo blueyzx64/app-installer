@@ -17,7 +17,11 @@
 
   /** "Can't install this" and "already installed" screen. Calm, no technical words. */
   interface Props {
-    kind: IncompatibleKind;
+    /** Used when `title` is not given. */
+    kind?: IncompatibleKind;
+    /** Text already resolved by the controller. Wins over `kind`. */
+    title?: string;
+    body?: string | null;
     appName: string;
     iconUrl?: string | null;
     /** Offered only for "already installed, same version". */
@@ -26,11 +30,27 @@
     onopen?: () => void;
   }
 
-  let { kind, appName, iconUrl = null, canOpen = false, onclose, onopen }: Props = $props();
+  let {
+    kind,
+    title: titleOverride,
+    body: bodyOverride,
+    appName,
+    iconUrl = null,
+    canOpen = false,
+    onclose,
+    onopen
+  }: Props = $props();
 
-  const title = $derived(t(`compat.${kind}.title`, { app: appName }));
-  const body = $derived(t(`compat.${kind}.body`));
-  const offerOpen = $derived(kind === 'alreadyInstalled.same' && canOpen && !!onopen);
+  const title = $derived(
+    titleOverride ?? (kind ? t(`compat.${kind}.title`, { app: appName }) : '')
+  );
+  const body = $derived(
+    bodyOverride !== undefined ? bodyOverride : kind ? t(`compat.${kind}.body`) : ''
+  );
+  // canOpen is the controller's decision (action === 'open'); with only `kind`, restrict to same-version.
+  const offerOpen = $derived(
+    canOpen && !!onopen && (kind === undefined || kind === 'alreadyInstalled.same')
+  );
 
   function onkeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
