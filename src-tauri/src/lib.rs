@@ -7,11 +7,13 @@ pub mod composition;
 pub mod dto;
 pub mod error;
 pub mod events;
+pub mod logging; // lane S11
 pub mod state;
 
 use tauri::Manager;
 
 pub fn run() {
+    logging::init(); // lane S11
     let launch_file = cli::file_from_argv(&std::env::args().collect::<Vec<_>>());
     let specta = bindings::builder();
 
