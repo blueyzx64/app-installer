@@ -73,8 +73,7 @@
   main {
     position: relative;
     height: 100%;
-    min-width: 640px;
-    min-height: 420px;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -83,11 +82,14 @@
     flex: none;
     padding: var(--sp-3) var(--sp-6);
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: var(--sp-4);
+    gap: var(--sp-2) var(--sp-4);
   }
   h1 {
+    min-width: 0;
+    overflow-wrap: anywhere;
     font-size: var(--fs-title-3);
     line-height: var(--lh-title-3);
     font-weight: 700;
