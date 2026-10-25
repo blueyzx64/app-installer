@@ -1,6 +1,8 @@
 //! Small shell-side adapters: the "unavailable" system backend (D-020) and the
 //! per-format inspector chain. No IO, no `tauri`.
 
+use std::time::Duration;
+
 use installer_application::CancelToken;
 use installer_application::ports::{InstallObserver, PackageInspector, SystemPackages};
 use installer_domain::{
@@ -56,20 +58,51 @@ pub enum AnySystemPackages {
 }
 
 impl AnySystemPackages {
-    /// Probe the system bus once. Never starts a service.
+    /// Pick a backend at startup. Each backend gets `STEP_BUDGET` to answer a
+    /// cheap health call; a hung or broken one is skipped. Worst case is about
+    /// 1.4 s in total, so a wedged bus can never stop the window from opening.
     pub async fn detect() -> Self {
         let pk = PackageKitSystemPackages::new();
-        if pk.is_available().await {
+        if healthy("PackageKit", async {
+            pk.is_available().await && pk.installed_version(PROBE_NAME).await.is_ok()
+        })
+        .await
+        {
             return Self::PackageKit(pk);
         }
         #[cfg(feature = "dnf5daemon")]
-        if installer_infrastructure::dnf5daemon::is_available().await {
-            match Dnf5Daemon::connect().await {
-                Ok(d) => return Self::Dnf5(d),
-                Err(e) => log::warn!("dnf5daemon found but not usable: {e}"),
+        {
+            let picked = tokio::time::timeout(STEP_BUDGET, async {
+                if !installer_infrastructure::dnf5daemon::is_available().await {
+                    return None;
+                }
+                let d = Dnf5Daemon::connect().await.ok()?;
+                d.installed_version(PROBE_NAME).await.ok()?;
+                Some(d)
+            })
+            .await;
+            match picked {
+                Ok(Some(d)) => return Self::Dnf5(d),
+                Ok(None) => {}
+                Err(_) => log::warn!("dnf5daemon did not answer in time"),
             }
         }
         Self::Unavailable(UnavailableSystemPackages)
+    }
+}
+
+/// Longest we wait for one backend during startup.
+const STEP_BUDGET: Duration = Duration::from_millis(700);
+/// A name no package has: the probe is a read-only lookup that finds nothing.
+const PROBE_NAME: &str = "installer-backend-probe";
+
+async fn healthy(what: &str, probe: impl std::future::Future<Output = bool>) -> bool {
+    match tokio::time::timeout(STEP_BUDGET, probe).await {
+        Ok(ok) => ok,
+        Err(_) => {
+            log::warn!("{what} did not answer in time");
+            false
+        }
     }
 }
 

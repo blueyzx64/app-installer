@@ -62,7 +62,9 @@ installer-domain = { path = "crates/domain" }
 installer-application = { path = "crates/application" }
 installer-infrastructure = { path = "crates/infrastructure" }
 tauri-plugin-dialog = "2"
+tokio = { version = "1", features = ["time"] } # startup timeouts
 
 [dev-dependencies]
 installer-application = { path = "crates/application", features = ["testing"] }
 tokio = { version = "1", features = ["rt", "macros"] }
+tempfile = "3"

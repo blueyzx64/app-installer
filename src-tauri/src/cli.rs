@@ -12,12 +12,59 @@ use crate::events::OpenFilePayload;
 /// Largest package we accept: 8 GiB.
 pub const MAX_PACKAGE_BYTES: u64 = 8 * 1024 * 1024 * 1024;
 
-/// First non-flag argument after the program name, if any.
+/// First path argument after the program name, if any.
+/// Flags (`-x`) and empty arguments are skipped. Everything after `--` is a
+/// path, so a file name that starts with a dash can still be opened.
 pub fn file_from_argv(argv: &[String]) -> Option<PathBuf> {
-    argv.iter()
-        .skip(1)
-        .find(|arg| !arg.starts_with('-'))
-        .map(PathBuf::from)
+    let mut only_paths = false;
+    for arg in argv.iter().skip(1) {
+        if arg.is_empty() {
+            continue;
+        }
+        if !only_paths && arg == "--" {
+            only_paths = true;
+            continue;
+        }
+        if only_paths || !arg.starts_with('-') {
+            return Some(PathBuf::from(arg));
+        }
+    }
+    None
+}
+
+/// `file:///a%20b` to `/a b`. Anything that is not a local `file://` URI is
+/// returned unchanged.
+fn decode_file_uri(raw: PathBuf) -> PathBuf {
+    use std::os::unix::ffi::{OsStrExt, OsStringExt};
+
+    let bytes = raw.as_os_str().as_bytes();
+    let Some(rest) = bytes.strip_prefix(b"file://") else {
+        return raw;
+    };
+    let rest = rest.strip_prefix(b"localhost").unwrap_or(rest);
+    if !rest.starts_with(b"/") {
+        return raw; // a remote host, or not a path: leave it alone
+    }
+    let mut out = Vec::with_capacity(rest.len());
+    let mut i = 0;
+    while i < rest.len() {
+        let hex = |b: u8| (b as char).to_digit(16);
+        match (
+            rest[i],
+            rest.get(i + 1).and_then(|b| hex(*b)),
+            rest.get(i + 2).and_then(|b| hex(*b)),
+        ) {
+            (b'%', Some(hi), Some(lo)) => {
+                out.push((hi * 16 + lo) as u8);
+                i += 3;
+            }
+            (b, _, _) => {
+                out.push(b);
+                i += 1;
+            }
+        }
+    }
+    PathBuf::from(std::ffi::OsString::from_vec(out))
 }
 
 /// Turn argv into an absolute path. Relative paths resolve against `cwd`
@@ -26,7 +73,7 @@ pub fn file_from_argv(argv: &[String]) -> Option<PathBuf> {
 /// unresolved, so `open_package` reports `notFound` instead of the file
 /// silently vanishing.
 pub fn launch_path_from_argv(argv: &[String], cwd: &Path) -> Option<PathBuf> {
-    let raw = file_from_argv(argv)?;
+    let raw = decode_file_uri(file_from_argv(argv)?);
     let absolute = if raw.is_absolute() {
         raw
     } else {
@@ -108,6 +155,26 @@ mod tests {
         assert_eq!(open_file_payload(&args(&["installer", "--new"]), cwd), None);
         let p = open_file_payload(&args(&["installer", "/nonexistent/b.rpm"]), cwd).unwrap();
         assert_eq!(p.path, "/nonexistent/b.rpm");
+    }
+
+    #[test]
+    fn double_dash_empty_and_uri() {
+        assert_eq!(
+            file_from_argv(&args(&["installer", "", "--", "-a.rpm"])),
+            Some(PathBuf::from("-a.rpm"))
+        );
+        assert_eq!(
+            decode_file_uri(PathBuf::from("file:///a%20b/%E2%9C%93.rpm")),
+            PathBuf::from("/a b/\u{2713}.rpm")
+        );
+        assert_eq!(
+            decode_file_uri(PathBuf::from("file://localhost/x%zz")),
+            PathBuf::from("/x%zz")
+        );
+        assert_eq!(
+            decode_file_uri(PathBuf::from("file://host/x")),
+            PathBuf::from("file://host/x")
+        );
     }
 
     #[test]
