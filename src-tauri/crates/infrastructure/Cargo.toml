@@ -8,4 +8,15 @@ description = "Adapters that implement the application ports (PackageKit, AppIma
 [dependencies]
 installer-domain.workspace = true
 installer-application.workspace = true
-# Lanes B and C add zbus, backhand, rpm, gio, ashpd, tokio, serde_json here.
+# lane S2b
+rpm = { version = "0.30.2", default-features = false, features = ["gzip-compression", "xz-compression", "zstd-compression"] }
+flate2 = "1.1.10"
+liblzma = "0.4.9"
+zstd = "0.14.3"
+tokio = { version = "1", features = ["rt"] }
+# Lanes B and C add zbus, backhand, gio, ashpd, serde_json here.
+
+[dev-dependencies]
+# lane S2b: builds tiny .rpm fixtures in tests
+rpm = { version = "0.30.2", default-features = false, features = ["payload", "gzip-compression", "xz-compression", "zstd-compression"] }
+tokio = { version = "1", features = ["rt", "macros"] }
