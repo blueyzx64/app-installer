@@ -93,7 +93,7 @@ impl fmt::Display for Rgb {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Appearance {
     pub color_scheme: ColorScheme,
     /// `None` means the default blue.
@@ -101,6 +101,27 @@ pub struct Appearance {
     pub high_contrast: bool,
     pub reduced_motion: bool,
     pub controls: WindowControls,
+    /// GNOME `text-scaling-factor`, clamped to 0.5..=3.0. Default 1.0.
+    #[serde(default = "default_text_scale")]
+    pub text_scale: f64,
+}
+
+fn default_text_scale() -> f64 {
+    1.0
+}
+
+impl Appearance {
+    pub const TEXT_SCALE_MIN: f64 = 0.5;
+    pub const TEXT_SCALE_MAX: f64 = 3.0;
+
+    /// Clamp into the allowed range; NaN becomes 1.0.
+    pub fn clamp_text_scale(raw: f64) -> f64 {
+        if raw.is_nan() {
+            1.0
+        } else {
+            raw.clamp(Self::TEXT_SCALE_MIN, Self::TEXT_SCALE_MAX)
+        }
+    }
 }
 
 impl Default for Appearance {
@@ -111,6 +132,7 @@ impl Default for Appearance {
             high_contrast: false,
             reduced_motion: false,
             controls: WindowControls::default(),
+            text_scale: 1.0,
         }
     }
 }
@@ -151,11 +173,19 @@ pub mod button_layout {
                 _ => ControlSide::Right,
             },
         };
-        let buttons = if side == ControlSide::Left {
+        let mut buttons = if side == ControlSide::Left {
             left
         } else {
             right
         };
+        // The window must always be closable (D-032): add close on the side that has buttons.
+        if !buttons.contains(&ControlButton::Close) {
+            if side == ControlSide::Left {
+                buttons.insert(0, ControlButton::Close);
+            } else {
+                buttons.push(ControlButton::Close);
+            }
+        }
         Some(WindowControls { side, buttons })
     }
 
@@ -224,9 +254,9 @@ mod tests {
             // both sides, close on neither: more buttons wins, tie goes right
             (
                 "minimize,maximize:maximize",
-                wc(Left, &[Minimize, Maximize]),
+                wc(Left, &[Close, Minimize, Maximize]),
             ),
-            ("minimize:maximize", wc(Right, &[Maximize])),
+            ("minimize:maximize", wc(Right, &[Maximize, Close])),
             // both have close: more buttons, else right
             ("close:close", wc(Right, &[Close])),
             ("close,minimize:close", wc(Left, &[Close, Minimize])),
@@ -266,5 +296,31 @@ mod tests {
         for bad in ["3584E4", "#3584E", "#3584E4F", "#GGGGGG", ""] {
             assert_eq!(Rgb::parse_hex(bad), None, "{bad:?}");
         }
+    }
+
+    #[test]
+    fn layouts_without_close_get_close_on_the_button_side() {
+        for (layout, want) in [
+            (
+                "appmenu:minimize,maximize",
+                wc(Right, &[Minimize, Maximize, Close]),
+            ),
+            ("minimize,maximize:", wc(Left, &[Close, Minimize, Maximize])),
+            ("minimize:maximize", wc(Right, &[Maximize, Close])),
+            (":maximize", wc(Right, &[Maximize, Close])),
+        ] {
+            let got = button_layout::parse(layout);
+            assert!(got.buttons.contains(&Close), "{layout:?}");
+            assert_eq!(got, want, "{layout:?}");
+        }
+    }
+
+    #[test]
+    fn text_scale_default_and_clamp() {
+        assert_eq!(Appearance::default().text_scale, 1.0);
+        assert_eq!(Appearance::clamp_text_scale(0.1), 0.5);
+        assert_eq!(Appearance::clamp_text_scale(9.0), 3.0);
+        assert_eq!(Appearance::clamp_text_scale(1.25), 1.25);
+        assert_eq!(Appearance::clamp_text_scale(f64::NAN), 1.0);
     }
 }

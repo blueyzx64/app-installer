@@ -125,10 +125,12 @@ impl OsReleaseProbe {
     }
 
     fn read_os_release(&self) -> OsReleaseInfo {
+        // First readable file that names a distro; an empty or broken one is skipped.
         self.os_release_paths
             .iter()
-            .find_map(|p| fs::read_to_string(p).ok())
+            .filter_map(|p| fs::read_to_string(p).ok())
             .map(|t| OsReleaseInfo::parse(&t))
+            .find(|i| !i.id.is_empty())
             .unwrap_or_default()
     }
 

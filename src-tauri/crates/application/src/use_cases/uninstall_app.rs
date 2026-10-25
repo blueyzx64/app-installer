@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use installer_domain::{AppId, AppSource, InstallError, UninstallOutcome};
 
+use crate::PreviewRegistry;
 use crate::ports::{AppLedger, DesktopIntegration, InstallObserver, SystemPackages, UserApps};
 
 /// Remove an app we installed. Only apps in the ledger can be removed (v1).
@@ -13,6 +14,7 @@ pub struct UninstallApp<S, U, D, L> {
     user: Arc<U>,
     desktop: Arc<D>,
     ledger: Arc<L>,
+    registry: Option<Arc<PreviewRegistry>>,
 }
 
 impl<S, U, D, L> UninstallApp<S, U, D, L>
@@ -28,12 +30,30 @@ where
             user,
             desktop,
             ledger,
+            registry: None,
         }
+    }
+
+    /// Share the one-at-a-time rule with installs: while an install or another
+    /// uninstall runs, `execute` returns `Failed(Busy)`.
+    #[must_use]
+    pub fn with_registry(mut self, registry: Arc<PreviewRegistry>) -> Self {
+        self.registry = Some(registry);
+        self
     }
 
     /// Never returns an error: failures and cancels are outcomes.
     #[tracing::instrument(skip(self, observer), fields(app = %id))]
     pub async fn execute(&self, id: &AppId, observer: &dyn InstallObserver) -> UninstallOutcome {
+        let _slot = match self
+            .registry
+            .as_deref()
+            .map(PreviewRegistry::begin_uninstall)
+        {
+            Some(Err(e)) => return UninstallOutcome::from_error(e),
+            Some(Ok(slot)) => Some(slot),
+            None => None,
+        };
         match self.run(id, observer).await {
             Ok(()) => UninstallOutcome::Removed,
             Err(e) => UninstallOutcome::from_error(e),
@@ -200,6 +220,43 @@ mod tests {
         assert_eq!(
             rig.run("lumen").await,
             UninstallOutcome::Failed(InstallError::Unknown("corrupt".into()))
+        );
+    }
+
+    #[tokio::test]
+    async fn uninstall_is_busy_while_an_install_runs_and_frees_its_slot() {
+        let rig = Rig::new();
+        rig.ledger.seed(sample_app(
+            "lumen",
+            "1",
+            installer_domain::AppSource::AppImage,
+        ));
+        let registry = Arc::new(PreviewRegistry::new());
+        let file = sample_file(installer_domain::PackageFormat::AppImage);
+        let preview = registry.insert(file.clone(), |id| installer_domain::PackagePreview {
+            id,
+            size_bytes: file.size_bytes,
+            meta: sample_meta(installer_domain::PackageFormat::AppImage),
+            compat: installer_domain::Compatibility::Ok,
+            needs_permission: false,
+        });
+        let uc = rig.uc().with_registry(registry.clone());
+        let id = AppId::from_name("lumen");
+
+        let slot = registry.begin_guarded(preview.id).unwrap();
+        assert_eq!(
+            uc.execute(&id, &rig.observer).await,
+            UninstallOutcome::Failed(InstallError::Busy)
+        );
+        assert!(rig.user.trashed().is_empty(), "nothing touched while busy");
+        drop(slot);
+        assert_eq!(
+            uc.execute(&id, &rig.observer).await,
+            UninstallOutcome::Removed
+        );
+        assert!(
+            registry.begin_uninstall().is_ok(),
+            "slot freed after uninstall"
         );
     }
 }

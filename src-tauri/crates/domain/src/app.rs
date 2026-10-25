@@ -25,29 +25,90 @@ pub struct InvalidAppId(pub String);
 impl AppId {
     /// Make a slug from a display or machine name. Always returns a valid id.
     ///
-    /// ASCII letters/digits are kept (lower-cased); every other run of characters
-    /// becomes one hyphen. Names with no ASCII letters or digits become `app`.
+    /// ASCII letters/digits are kept (lower-cased); common Latin accents are
+    /// stripped (`é` becomes `e`); `+` becomes `plus`; every other run of characters
+    /// becomes one hyphen. If letters or digits of the name could not be kept
+    /// (CJK, Cyrillic, ...), a short stable hash of the whole name is appended
+    /// (`app-1a2b3c4d` when nothing is left), so different names keep different ids.
     pub fn from_name(name: &str) -> AppId {
         let mut slug = String::with_capacity(name.len());
+        let mut lossy = false;
+        let sep = |slug: &mut String| {
+            if !slug.is_empty() && !slug.ends_with('-') {
+                slug.push('-');
+            }
+        };
         for ch in name.chars() {
             if ch.is_ascii_alphanumeric() {
                 slug.push(ch.to_ascii_lowercase());
-            } else if !slug.ends_with('-') {
-                slug.push('-');
+            } else if ch == '+' {
+                sep(&mut slug);
+                slug.push_str("plus-");
+            } else if let Some(folded) = fold_accent(ch) {
+                slug.push_str(folded);
+            } else {
+                if ch.is_alphanumeric() {
+                    lossy = true;
+                }
+                sep(&mut slug);
             }
         }
-        slug.truncate(MAX_SLUG_LEN); // ASCII only, so any index is a char boundary
-        let slug = slug.trim_matches('-');
-        if slug.is_empty() {
-            AppId(FALLBACK_SLUG.to_owned())
+        let hash = format!("{:08x}", fnv1a32(name));
+        let room = if lossy {
+            MAX_SLUG_LEN - 1 - hash.len()
         } else {
-            AppId(slug.to_owned())
+            MAX_SLUG_LEN
+        };
+        slug.truncate(room); // ASCII only, so any index is a char boundary
+        let base = slug.trim_matches('-');
+        match (base.is_empty(), lossy) {
+            (true, false) => AppId(FALLBACK_SLUG.to_owned()),
+            (true, true) => AppId(format!("{FALLBACK_SLUG}-{hash}")),
+            (false, false) => AppId(base.to_owned()),
+            (false, true) => AppId(format!("{base}-{hash}")),
         }
     }
 
     pub fn as_str(&self) -> &str {
         &self.0
     }
+}
+
+/// FNV-1a, 32 bit. Stable across runs and platforms (unlike `DefaultHasher`).
+fn fnv1a32(s: &str) -> u32 {
+    s.bytes().fold(0x811c_9dc5_u32, |h, b| {
+        (h ^ u32::from(b)).wrapping_mul(0x0100_0193)
+    })
+}
+
+/// ASCII form of common Latin letters with accents. `None` for anything else.
+fn fold_accent(ch: char) -> Option<&'static str> {
+    let lower = ch.to_lowercase().next()?;
+    const TABLE: [(&str, &str); 19] = [
+        ("àáâãäåāăą", "a"),
+        ("çćĉċč", "c"),
+        ("ďđ", "d"),
+        ("èéêëēĕėęě", "e"),
+        ("ĝğ", "g"),
+        ("ìíîïīĭįı", "i"),
+        ("ł", "l"),
+        ("ñńň", "n"),
+        ("òóôõöøōŏő", "o"),
+        ("ř", "r"),
+        ("śşš", "s"),
+        ("ţť", "t"),
+        ("ùúûüūŭůűų", "u"),
+        ("ýÿ", "y"),
+        ("źżž", "z"),
+        ("ß", "ss"),
+        ("æ", "ae"),
+        ("œ", "oe"),
+        ("þ", "th"),
+    ];
+    TABLE
+        .iter()
+        .find(|(chars, _)| chars.contains(lower))
+        .map(|(_, out)| *out)
 }
 
 impl std::str::FromStr for AppId {
@@ -106,11 +167,11 @@ mod tests {
             ("lumen-notes", "lumen-notes"),
             ("  Lumen   Notes  ", "lumen-notes"),
             ("Lumen_Notes 2.0", "lumen-notes-2-0"),
-            ("C++ Editor", "c-editor"),
+            ("C++ Editor", "c-plus-plus-editor"),
             ("../../etc/passwd", "etc-passwd"),
             ("a/b\\c", "a-b-c"),
-            ("Caf\u{e9} Reader", "caf-reader"),
-            ("\u{65e5}\u{672c}\u{8a9e}", "app"),
+            ("Caf\u{e9} Reader", "cafe-reader"),
+            ("\u{2122}\u{2014}", "app"),
             ("", "app"),
             ("---", "app"),
             ("UPPER", "upper"),
@@ -174,5 +235,28 @@ mod prop {
             prop_assert_eq!(AppId::from_name(s), id.clone());
             prop_assert!(s.parse::<AppId>().is_ok());
         }
+    }
+
+    #[test]
+    fn plus_and_non_ascii_names_stay_distinct() {
+        let id = |n: &str| AppId::from_name(n);
+        assert_eq!(id("C++ Studio").as_str(), "c-plus-plus-studio");
+        assert_ne!(id("C++ Studio"), id("C Studio"));
+        assert_eq!(id("Caf\u{e9} Reader").as_str(), "cafe-reader");
+        assert_eq!(id("\u{c5}ngstr\u{f6}m").as_str(), "angstrom");
+        let (ja, zh) = (id("\u{65e5}\u{672c}\u{8a9e}"), id("\u{4e2d}\u{6587}"));
+        assert_ne!(ja, zh);
+        assert!(ja.as_str().starts_with("app-"), "{ja}");
+        assert_eq!(ja, id("\u{65e5}\u{672c}\u{8a9e}"), "stable");
+        let mixed = id("Lumen \u{7b14}\u{8bb0}");
+        assert!(mixed.as_str().starts_with("lumen-"), "{mixed}");
+        assert_ne!(mixed, id("Lumen \u{65e5}\u{8a18}"));
+        // Hash ids and long lossy names are valid ids and round-trip.
+        for n in [ja.as_str(), mixed.as_str()] {
+            assert_eq!(n.parse::<AppId>().unwrap().as_str(), n);
+        }
+        let long = id(&format!("{}\u{65e5}", "x".repeat(100)));
+        assert!(long.as_str().len() <= 64);
+        assert_eq!(long.as_str().parse::<AppId>().unwrap(), long);
     }
 }
