@@ -55,6 +55,8 @@ export interface MockOptions {
 export interface MockControls {
   scenario: Scenario;
   emitOpenFile(path: string): void;
+  /** Drop an app from the installed list without any event (as if removed behind our back). */
+  removeApp(appId: string): void;
   emitAppearance(a: Appearance): void;
   launched: string[];
   windowCalls: string[];
@@ -234,6 +236,9 @@ export function createMockGateways(options: MockOptions = {}): MockGateways {
     controls: {
       scenario,
       emitOpenFile: (path) => openFileCbs.forEach((cb) => cb(path)),
+      removeApp: (appId) => {
+        installed = installed.filter((a) => a.id !== appId);
+      },
       emitAppearance: (a) => {
         appearance = a;
         appearanceCbs.forEach((cb) => cb(a));

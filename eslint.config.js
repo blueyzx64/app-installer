@@ -41,7 +41,23 @@ export default ts.config(
   },
   {
     files: ['src/lib/core/**'],
-    rules: { 'no-restricted-imports': ['error', { patterns: corePatterns }] }
+    rules: {
+      'no-restricted-imports': 'off',
+      // Core may only look outward for generated DTO types (type-only imports).
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            ...corePatterns,
+            {
+              group: ['**/infrastructure/**'],
+              allowTypeImports: true,
+              message: 'src/lib/core must not import runtime code from infrastructure.'
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     files: ['src/lib/infrastructure/tauri/**'],

@@ -239,4 +239,22 @@ describe('InstallerController', () => {
     const { c } = await setup('already-installed');
     expect(c.incompatibleKind).toBe('alreadyInstalled.same');
   });
+
+  it('cancel pressed while starting is sent once the install is known to the backend', async () => {
+    const { c } = await setup('rpm');
+    c.keyInstall();
+    expect(c.state.tag).toBe('starting');
+    c.cancelInstall();
+    await settle(10_000);
+    expect(c.state.tag).toBe('ready');
+  });
+
+  it('openInstalled launches by id from the package name', async () => {
+    const { c, gw } = await setup('already-installed');
+    c.openInstalled();
+    await settle(50);
+    expect(gw.controls.launched).toEqual(['lumen-notes']);
+    await settle(OPEN_APP_CLOSE_MS);
+    expect(c.state.tag).toBe('idle');
+  });
 });

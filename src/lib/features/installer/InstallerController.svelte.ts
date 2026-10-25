@@ -19,6 +19,7 @@ import {
   type InstallerEvent,
   type InstallerState
 } from '$lib/core/domain/installer-machine';
+import { appIdFromName } from '$lib/core/domain/app-id';
 import { formatBytes, BIG_DOWNLOAD_BYTES } from '$lib/core/domain/format';
 import {
   toCommandError,
@@ -60,6 +61,7 @@ export class InstallerController {
 
   readonly #gw: Gateways;
   #closeTimer: ReturnType<typeof setTimeout> | null = null;
+  #cancelPending = false;
 
   constructor(gateways: Gateways) {
     this.#gw = gateways;
@@ -121,7 +123,11 @@ export class InstallerController {
     return '';
   });
 
-  etaText = $derived(this.state.tag === 'installing' ? text(etaCopy(this.state.etaSecs)) : '');
+  etaText = $derived(
+    this.state.tag === 'installing' && this.state.phase !== 'finishing'
+      ? text(etaCopy(this.state.etaSecs))
+      : ''
+  );
 
   incompatible = $derived.by<IncompatibleView | null>(() => {
     const s = this.state;
@@ -197,6 +203,11 @@ export class InstallerController {
     if (!this.canCancel) return;
     const p = previewOf(this.state);
     if (!p) return;
+    if (this.state.tag === 'starting') {
+      // The backend may not know this install yet; send the cancel with the first progress event.
+      this.#cancelPending = true;
+      return;
+    }
     // The state changes when the backend reports the `cancelled` outcome.
     this.#gw.installer.cancelInstall(p.id).catch(() => {});
   }
@@ -222,13 +233,14 @@ export class InstallerController {
   openInstalled(): void {
     const s = this.state;
     if (s.tag !== 'incompatible' || this.launching) return;
-    const name = s.preview.displayName;
+    // The installed app's id comes from the package name (same rule as the Rust side).
+    const id = appIdFromName(s.preview.name);
     this.launching = true;
     this.#gw.library
       .listInstalled()
       .then((apps) => {
-        const app = apps.find((a) => a.displayName === name);
-        if (app) this.#launchThenClose(app.id);
+        const app = apps.find((a) => a.id === id);
+        if (app?.canLaunch) this.#launchThenClose(app.id);
         else this.launching = false;
       })
       .catch(() => {
@@ -238,13 +250,17 @@ export class InstallerController {
 
   #launchThenClose(appId: string): void {
     this.launching = true;
-    this.#gw.library.launchApp(appId).catch(() => {});
     this.#clearTimer();
     this.#closeTimer = setTimeout(() => {
       this.#closeTimer = null;
       this.launching = false;
       this.close();
     }, OPEN_APP_CLOSE_MS);
+    // A failed launch keeps the window open instead of pretending the app started.
+    this.#gw.library.launchApp(appId).catch(() => {
+      this.#clearTimer();
+      this.launching = false;
+    });
   }
 
   #clearTimer(): void {
@@ -261,6 +277,11 @@ export class InstallerController {
       // Queued behind a drag or an install: tell the person it will come next.
       this.queueNotice = { title: t('queue.title'), body: t('queue.body') };
     }
+    if (this.#cancelPending && (next.tag === 'awaitingPermission' || next.tag === 'installing')) {
+      this.#cancelPending = false;
+      this.#gw.installer.cancelInstall(next.preview.id).catch(() => {});
+    }
+    if (!isBusy(next)) this.#cancelPending = false;
     if (next.tag === 'inspecting' && (prev.tag !== 'inspecting' || prev.path !== next.path)) {
       this.#inspect(next.path);
     } else if (next.tag === 'starting' && prev.tag !== 'starting') {

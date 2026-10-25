@@ -15,8 +15,6 @@
   import Toast from '$lib/ui/Toast.svelte';
 
   const { installer, defaultHandler } = useControllers();
-
-  $effect(() => installer.start());
 </script>
 
 <main class="install" data-state={installer.state.tag}>

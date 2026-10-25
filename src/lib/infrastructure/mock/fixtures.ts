@@ -25,13 +25,16 @@ export const LUMEN_FILES: Record<PackageFormat, string> = {
 export function formatForScenario(s: Scenario): PackageFormat {
   switch (s) {
     case 'deb':
+    case 'wrong-family':
       return 'deb';
     case 'appimage':
     case 'missing-fuse2':
+    case 'null-percent':
       return 'appImage';
     case 'rpm':
     case 'incompatible-arch':
     case 'already-installed':
+    case 'older-installed':
     case 'update':
     case 'fail-offline':
     case 'cancel-permission':
@@ -76,6 +79,13 @@ export function lumenPreview(
         ...base,
         compat: { kind: 'alreadyInstalled', relation: 'same', installedVersion: LUMEN_VERSION }
       };
+    case 'older-installed':
+      return {
+        ...base,
+        compat: { kind: 'alreadyInstalled', relation: 'older', installedVersion: '2.5.0' }
+      };
+    case 'wrong-family':
+      return { ...base, compat: { kind: 'wrongFamily', madeFor: 'debBased' } };
     case 'update':
       return {
         ...base,
@@ -86,6 +96,7 @@ export function lumenPreview(
     case 'rpm':
     case 'deb':
     case 'appimage':
+    case 'null-percent':
     case 'fail-offline':
     case 'cancel-permission':
     case 'empty-library':
@@ -138,6 +149,7 @@ export function seedLibrary(scenario: Scenario): InstalledApp[] {
     }
   ];
   if (scenario === 'already-installed') apps.unshift(lumenApp('systemPackage'));
+  if (scenario === 'older-installed') apps.unshift(lumenApp('systemPackage', '2.5.0'));
   if (scenario === 'update') apps.unshift(lumenApp('systemPackage', '2.3.0'));
   return apps;
 }

@@ -2,6 +2,8 @@
   // Composition root: picks the gateways (Tauri in the app, mock in a plain browser) and
   // provides them plus the feature controllers to the whole tree.
   import '$lib/ui/base.css';
+  import { goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
   import { createControllers, provideControllers, provideGateways } from '$lib/app/context';
   import { isTauri } from '$lib/app/env';
   import { AppearanceStore } from '$lib/features/appearance/AppearanceStore.svelte';
@@ -13,12 +15,20 @@
   let { children } = $props();
 
   const gateways = provideGateways(isTauri() ? createTauriGateways() : createMockGateways());
-  const { defaultHandler } = provideControllers(createControllers(gateways));
+  // Mock mode only: e2e and manual testing drive open-file, appearance and removals from here.
+  if ('controls' in gateways) {
+    (globalThis as { __mock?: unknown }).__mock = gateways.controls;
+  }
+  const { defaultHandler, installer } = provideControllers(createControllers(gateways));
   const appearance = new AppearanceStore(gateways.appearance);
 
   $effect(() => {
     void defaultHandler.check();
   });
+
+  // One subscription for the whole app (F-02, D-022): a file opened on any screen, library
+  // included, goes to the installer. A busy install queues it instead.
+  $effect(() => installer.start(() => void goto(resolve('/install'))));
 
   $effect(() => {
     void appearance.start();
