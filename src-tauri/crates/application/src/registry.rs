@@ -87,13 +87,17 @@ impl PreviewRegistry {
     }
 
     /// Mark the preview as installing and hand out its cancel token.
-    /// `NotFound` for unknown ids, `Busy` if an install is already running.
+    /// `NotFound` for unknown ids, `Busy` if any install is already running.
     pub fn begin(&self, id: PreviewId) -> Result<(StoredPreview, CancelToken), InstallError> {
         let mut g = self.lock();
-        let entry = g.entries.get_mut(&id).ok_or(InstallError::NotFound)?;
-        if entry.active.is_some() {
+        if !g.entries.contains_key(&id) {
+            return Err(InstallError::NotFound);
+        }
+        // F-02: one install at a time, across all previews.
+        if g.entries.values().any(|e| e.active.is_some()) {
             return Err(InstallError::Busy);
         }
+        let entry = g.entries.get_mut(&id).ok_or(InstallError::NotFound)?;
         let token = CancelToken::new();
         entry.active = Some(token.clone());
         Ok((entry.stored.clone(), token))
@@ -171,6 +175,19 @@ mod tests {
         assert!(reg.begin(id).is_ok(), "retry allowed");
         reg.finish(id, false);
         assert_eq!(reg.begin(id).unwrap_err(), InstallError::NotFound);
+    }
+
+    #[test]
+    fn only_one_install_runs_at_a_time() {
+        let reg = PreviewRegistry::new();
+        let (a, b) = (add(&reg), add(&reg));
+        reg.begin(a).unwrap();
+        assert_eq!(reg.begin(b).unwrap_err(), InstallError::Busy);
+        // Opening more previews while busy is fine.
+        let c = add(&reg);
+        assert!(reg.get(c).is_some());
+        reg.finish(a, false);
+        assert!(reg.begin(b).is_ok(), "free again after the first ends");
     }
 
     #[test]
