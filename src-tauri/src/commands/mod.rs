@@ -2,6 +2,7 @@
 
 pub mod appearance;
 pub mod defaults;
+pub mod files; // lane S4b
 pub mod install;
 pub mod library;
 pub mod package;
