@@ -52,7 +52,8 @@ pk_enum!(
         Updating = 11, Installing = 12, Removing = 13, Cleanup = 14, Obsoleting = 15,
         CollectionInstalled = 16, CollectionAvailable = 17, Finished = 18,
         Reinstalling = 19, Downgrading = 20, Preparing = 21, Decompressing = 22,
-        Untrusted = 23, Trusted = 24, Unavailable = 25,
+        Untrusted = 23, Trusted = 24, Unavailable = 25, Critical = 26, Install = 27,
+        Remove = 28, Obsolete = 29, Downgrade = 30,
     }
 );
 

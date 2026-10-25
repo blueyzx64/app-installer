@@ -164,7 +164,8 @@ impl PkBus for SystemBus {
             .await
             .map_err(backend)?;
         let (send, recv) = mpsc::unbounded_channel();
-        let pump: JoinHandle<()> = tokio::spawn(async move {
+        // Guard: any early return below aborts the task (and drops its match rule).
+        let pump = PumpGuard(tokio::spawn(async move {
             while let Some(Ok(msg)) = stream.next().await {
                 for ev in decode(&msg) {
                     if send.send(ev).is_err() {
@@ -172,7 +173,7 @@ impl PkBus for SystemBus {
                     }
                 }
             }
-        });
+        }));
 
         let proxy = TransactionProxy::builder(&conn)
             .path(path)
@@ -190,7 +191,7 @@ impl PkBus for SystemBus {
         Ok(ZbusTransaction {
             proxy,
             events: Mutex::new(recv),
-            pump,
+            _pump: pump,
         })
     }
 
@@ -217,12 +218,15 @@ impl PkBus for SystemBus {
 pub struct ZbusTransaction {
     proxy: TransactionProxy<'static>,
     events: Mutex<mpsc::UnboundedReceiver<PkEvent>>,
-    pump: JoinHandle<()>,
+    _pump: PumpGuard,
 }
 
-impl Drop for ZbusTransaction {
+/// Aborts the signal pump when dropped.
+struct PumpGuard(JoinHandle<()>);
+
+impl Drop for PumpGuard {
     fn drop(&mut self) {
-        self.pump.abort();
+        self.0.abort();
     }
 }
 
@@ -289,7 +293,11 @@ fn decode(msg: &zbus::Message) -> Vec<PkEvent> {
             .ok()
             .and_then(|m| {
                 let id = String::try_from(m.get("package-id")?.try_clone().ok()?).ok()?;
-                let size = u64::try_from(m.get("size")?.try_clone().ok()?).ok()?;
+                // F-27 is about downloads: prefer `download-size`; `size` is the installed size.
+                let size = m
+                    .get("download-size")
+                    .or_else(|| m.get("size"))
+                    .and_then(|v| u64::try_from(v.try_clone().ok()?).ok())?;
                 Some(vec![PkEvent::Details {
                     package_id: id,
                     size,
@@ -387,5 +395,36 @@ mod tests {
         .unwrap();
         assert_eq!(r.result(), Ok(()));
         assert!(r.packages.iter().any(|p| p.id.starts_with("bash;")));
+    }
+}
+
+#[cfg(test)]
+mod review_r4_proxy {
+    use super::*;
+    use zbus::zvariant::Value;
+
+    /// PackageKit 1.4.0 pk-transaction.c:569-575 sends `size` (INSTALLED size, dnf5-backend-thread.cpp:360
+    /// get_install_size) and a separate `download-size`. F-27 is about downloads.
+    #[test]
+    fn review_r4_details_uses_download_size() {
+        let mut m: HashMap<&str, Value> = HashMap::new();
+        m.insert("package-id", Value::from("dep;1;x86_64;fedora"));
+        m.insert("size", Value::from(300_000_000u64));
+        m.insert("download-size", Value::from(80_000_000u64));
+        let msg = zbus::Message::signal(
+            "/1_abc",
+            "org.freedesktop.PackageKit.Transaction",
+            "Details",
+        )
+        .unwrap()
+        .build(&m)
+        .unwrap();
+        assert_eq!(
+            decode(&msg),
+            vec![PkEvent::Details {
+                package_id: "dep;1;x86_64;fedora".into(),
+                size: 80_000_000
+            }]
+        );
     }
 }
