@@ -142,6 +142,8 @@ pub async fn run<T: PkTransaction>(
         allow_cancel: false,
     };
     let mut last_emitted: Option<Shown> = None;
+    let mut seen_work = false;
+    let is_remove = matches!(op, PkOp::RemovePackages { .. });
     let emit = |s: &Shown, last: &mut Option<Shown>| {
         if *last != Some(*s) {
             *last = Some(*s);
@@ -188,7 +190,15 @@ pub async fn run<T: PkTransaction>(
                         }
                     }
                     PkEvent::Status(s) => {
-                        shown.phase = mapping::next_phase(shown.phase, mapping::status_to_phase(s));
+                        let ctx = mapping::PhaseCtx {
+                            current: shown.phase,
+                            seen_work,
+                            is_remove,
+                        };
+                        if let Some(p) = mapping::status_phase(s, ctx) {
+                            shown.phase = mapping::next_phase(shown.phase, p);
+                        }
+                        seen_work |= mapping::implies_work(s);
                     }
                     PkEvent::Percentage(p) => shown.percent = mapping::percent(p),
                     PkEvent::RemainingTime(t) => shown.eta = mapping::eta(t),
