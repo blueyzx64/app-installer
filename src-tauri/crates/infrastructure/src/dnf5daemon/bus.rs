@@ -87,5 +87,7 @@ pub trait Dnf5Bus: Sync {
     ) -> Result<UnboundedReceiver<Dnf5Signal>, BusError>;
     /// Returns when the transaction is finished (polkit prompt happens inside).
     async fn do_transaction(&self, session: &SessionId) -> Result<(), BusError>;
-    async fn cancel(&self, session: &SessionId) -> Result<(), BusError>;
+    /// `Goal.cancel`. `Ok(true)` = the daemon accepted it, `Ok(false)` = refused
+    /// (the `(success, error)` reply said no; it only works while downloading).
+    async fn cancel(&self, session: &SessionId) -> Result<bool, BusError>;
 }
