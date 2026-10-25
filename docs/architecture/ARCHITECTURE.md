@@ -194,7 +194,7 @@ pub trait AppearanceSource { /* snapshot + change stream */ }
 
 > **As built (W0, D-011):** extra ports `FileProbe` (reads the file head for sniffing) and `Clock`; `InstallObserver::on_plan(&InstallPlan)`; `DefaultHandlerRegistry::dismiss_prompt`. Async ports use native `async fn` + `trait_variant::make(Send)` and are used through generics, not `dyn` (see the `rust-clean-architecture` skill). `CancelToken` is `tokio_util::sync::CancellationToken`.
 
-> Async traits: use native `async fn` in traits together with `trait_variant::make(Send)`. Fall back to `#[async_trait]` only where you need `dyn Trait` objects of async traits. Pick one approach and keep to it; document the choice in the skill [`rust-clean-architecture`](../../.claude/skills/rust-clean-architecture/SKILL.md).
+> Async traits (decided in W0): native `async fn` in traits with `trait_variant::make(Send)`. Async ports are not object safe, so use cases are generic over their ports. Only the sync observer ports are `dyn`. `async_trait` is not used. Details are in ADR-0003 and the skill [`rust-clean-architecture`](../../.claude/skills/rust-clean-architecture/SKILL.md).
 
 ## 7. Infrastructure adapters (`installer-infrastructure`)
 
@@ -274,6 +274,10 @@ sequenceDiagram
     UI->>UI: state = ready | incompatible
 ```
 
+### 9.1a Files that are not a known package
+
+`open_package` sniffs the file by content. A file with no known magic bytes (for example an HTML page saved as `.rpm`) is rejected with `CommandError{code: corruptFile}`. No preview is created, and the UI shows the "damaged or isn't an app package" message. A recognised format that this version cannot read (Type-1 AppImage, DwarFS) is different: it gets a preview with `Compatibility.unsupported`.
+
 ### 9.2 Installing an .rpm (system scope)
 
 ```mermaid
@@ -306,6 +310,10 @@ sequenceDiagram
     UC-->>S: Installed(app)
     S-->>UI: InstallEvent::Finished{Installed}
 ```
+
+Phase order is fixed. System scope emits `Preparing → WaitingForPermission → Downloading/Installing → Finishing`. User scope (AppImage) emits `Preparing → Installing → Finishing` and never `WaitingForPermission`. The UI machine never goes from installing back to awaiting.
+
+Until the PackageKit adapter lands, the shell wires `SystemPackages` to an "unavailable" stub: `installed_version` returns `Ok(None)` and `install` returns `Err(BackendUnavailable)`. The AppImage path is fully real. Fakes in `application::testing` may be wired the same way, only from clearly named `composition::fake_*` functions.
 
 If polkit is dismissed, the result is `ErrorCode(NOT_AUTHORIZED)` or `Finished(CANCELLED)`, which maps to `InstallOutcome::Cancelled`. The UI quietly springs the icon back. That is not an error state.
 
@@ -375,6 +383,7 @@ flowchart TB
 | **Errors** | Domain `InstallError` / `InspectError` → `CommandError{code}` → TS `ErrorCode` union → `copy.error(code)` gives a plain sentence plus an action. Technical detail goes **only** to logs and an optional "Details" disclosure |
 | **Logging** | `tracing` + `tracing-subscriber` to stderr and `$XDG_STATE_HOME/<app-id>/log/`. Never log file contents or environment values |
 | **Security** | Strict CSP (`default-src 'self'`; fonts bundled locally, no Google Fonts at runtime). Minimal capabilities (`core:window:allow-start-dragging`, `allow-close`, `allow-minimize`, `core:event:default`). Paths reach `open_package` only from argv, single-instance, a file chooser or a drop event, and are canonicalised and checked to be regular files. AppImage `.desktop` values are sanitised. File names are slugged |
+| **Unavailable backends** | A missing backend is `BackendUnavailable`, never a panic. `install()` on a preview that is not installable returns `Failed(Unknown("incompatible"))`; the UI never offers that action |
 | **Concurrency** | One install at a time per window. A package opened while busy is queued and shown as a toast. `CancelToken` is backed by `tokio_util::sync::CancellationToken` |
 | **i18n** | All strings in `src/lib/i18n/en.json` from day one; `copy.ts` reads them. Rust never produces user-facing text |
 | **Accessibility** | Keyboard install (Enter), focus rings, `aria-live` progress, reduced motion, high contrast, 44 px hit targets for touch |
