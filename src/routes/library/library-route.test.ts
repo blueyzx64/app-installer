@@ -3,7 +3,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto }));
+// afterNavigate fires once on arrival in these tests.
+vi.mock('$app/navigation', () => ({ goto, afterNavigate: (fn: () => void) => fn() }));
 vi.mock('$app/paths', () => ({ resolve: (p: string) => p }));
 
 import TestHost from '$lib/features/library/test-host.svelte';

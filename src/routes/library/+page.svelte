@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
+  import { afterNavigate, goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { useControllers, useGateways } from '$lib/app/context';
   import AppGrid from '$lib/features/library/AppGrid.svelte';
@@ -13,7 +13,9 @@
   const { library, installer } = useControllers();
   const gateways = useGateways();
 
-  $effect(() => {
+  // Reload on every arrival (first open and coming back), so apps removed outside the
+  // installer drop out of the list (F-43).
+  afterNavigate(() => {
     void library.load();
   });
 

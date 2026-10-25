@@ -30,6 +30,22 @@ describe('LibraryController', () => {
     expect(c.state.tag).toBe('empty');
     expect(c.notice).toBeNull();
   });
+  it('a slow earlier load never overwrites a newer one', async () => {
+    const gw = createMockGateways({ scenario: 'rpm', launchFile: null });
+    const stale = await gw.library.listInstalled(); // three seeded apps
+    let releaseOld!: (apps: typeof stale) => void;
+    gw.library.listInstalled = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise<typeof stale>((r) => (releaseOld = r)))
+      .mockImplementationOnce(() => Promise.resolve([]));
+    const c = new LibraryController(gw);
+    const first = c.load();
+    await c.load();
+    expect(c.state.tag).toBe('empty');
+    releaseOld(stale);
+    await first;
+    expect(c.state.tag).toBe('empty');
+  });
   it('trash confirm copy differs for user and system apps', async () => {
     const { c } = await setup('rpm');
     await c.requestTrash('pixel-draw');

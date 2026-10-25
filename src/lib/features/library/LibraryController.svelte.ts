@@ -75,12 +75,16 @@ export class LibraryController {
     return text(removeErrorCopy(s.notice.code, this.#noticeApp));
   });
 
+  #loadSeq = 0;
+
   async load(): Promise<void> {
+    // The controller outlives the route: a slow earlier load must not overwrite a newer one.
+    const seq = ++this.#loadSeq;
     try {
       const apps = await this.#gw.library.listInstalled();
-      this.#dispatch({ type: 'LOADED', apps });
+      if (seq === this.#loadSeq) this.#dispatch({ type: 'LOADED', apps });
     } catch (e) {
-      this.#dispatch({ type: 'LOAD_FAILED', error: toCommandError(e) });
+      if (seq === this.#loadSeq) this.#dispatch({ type: 'LOAD_FAILED', error: toCommandError(e) });
     }
   }
 
