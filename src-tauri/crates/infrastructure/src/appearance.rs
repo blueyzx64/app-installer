@@ -25,6 +25,7 @@ const WM_SCHEMA: &str = "org.gnome.desktop.wm.preferences";
 const WM_LAYOUT_KEY: &str = "button-layout";
 const IFACE_SCHEMA: &str = "org.gnome.desktop.interface";
 const ANIMATIONS_KEY: &str = "enable-animations";
+const TEXT_SCALE_KEY: &str = "text-scaling-factor";
 
 const PORTAL_TIMEOUT: Duration = Duration::from_secs(2);
 const DEBOUNCE: Duration = Duration::from_millis(50);
@@ -37,6 +38,7 @@ pub struct RawSettings {
     pub contrast: Option<PortalContrast>,
     pub button_layout: Option<String>,
     pub enable_animations: Option<bool>,
+    pub text_scale: Option<f64>,
 }
 
 /// Portal colour scheme to ours. Only an explicit "prefer dark" is dark.
@@ -71,6 +73,9 @@ pub fn merge(raw: &RawSettings) -> Appearance {
         accent: raw.accent.and_then(map_accent),
         high_contrast: raw.contrast.is_some_and(map_contrast),
         reduced_motion: raw.enable_animations.is_some_and(map_reduced_motion),
+        text_scale: raw
+            .text_scale
+            .map_or(d.text_scale, Appearance::clamp_text_scale),
         controls: raw
             .button_layout
             .as_deref()
@@ -92,7 +97,7 @@ fn has_key(schema: &str, key: &str) -> bool {
         .is_some_and(|s| s.has_key(key))
 }
 
-fn read_gsettings() -> (Option<String>, Option<bool>) {
+fn read_gsettings() -> (Option<String>, Option<bool>, Option<f64>) {
     let layout = has_key(WM_SCHEMA, WM_LAYOUT_KEY)
         .then(|| gsettings(WM_SCHEMA))
         .flatten()
@@ -101,7 +106,11 @@ fn read_gsettings() -> (Option<String>, Option<bool>) {
         .then(|| gsettings(IFACE_SCHEMA))
         .flatten()
         .map(|s| s.boolean(ANIMATIONS_KEY));
-    (layout, animations)
+    let scale = has_key(IFACE_SCHEMA, TEXT_SCALE_KEY)
+        .then(|| gsettings(IFACE_SCHEMA))
+        .flatten()
+        .map(|s| s.double(TEXT_SCALE_KEY));
+    (layout, animations, scale)
 }
 
 async fn within<T>(f: impl Future<Output = Result<T, ashpd::Error>>) -> Option<T> {
@@ -117,9 +126,10 @@ async fn read_raw() -> RawSettings {
             .map(|c| (c.red(), c.green(), c.blue()));
         raw.contrast = within(portal.contrast()).await;
     }
-    if let Ok((layout, animations)) = tokio::task::spawn_blocking(read_gsettings).await {
+    if let Ok((layout, animations, scale)) = tokio::task::spawn_blocking(read_gsettings).await {
         raw.button_layout = layout;
         raw.enable_animations = animations;
+        raw.text_scale = scale;
     }
     raw
 }
@@ -147,7 +157,11 @@ fn spawn_gsettings_watch(ticks: mpsc::UnboundedSender<()>) -> Option<glib::MainL
             let _ = ctx.with_thread_default(|| {
                 let main_loop = glib::MainLoop::new(Some(&ctx), false);
                 let mut keep = Vec::new();
-                for (schema, key) in [(WM_SCHEMA, WM_LAYOUT_KEY), (IFACE_SCHEMA, ANIMATIONS_KEY)] {
+                for (schema, key) in [
+                    (WM_SCHEMA, WM_LAYOUT_KEY),
+                    (IFACE_SCHEMA, ANIMATIONS_KEY),
+                    (IFACE_SCHEMA, TEXT_SCALE_KEY),
+                ] {
                     if !has_key(schema, key) {
                         continue;
                     }
@@ -285,10 +299,12 @@ mod tests {
             contrast: Some(PortalContrast::High),
             button_layout: Some("close,minimize,maximize:".into()),
             enable_animations: Some(false),
+            text_scale: Some(1.25),
         });
         assert_eq!(a.color_scheme, ColorScheme::Dark);
         assert_eq!(a.accent.unwrap().to_hex(), "#FF0000");
         assert!(a.high_contrast && a.reduced_motion);
+        assert_eq!(a.text_scale, 1.25);
         assert_eq!(a.controls.side, ControlSide::Left);
         assert_eq!(
             a.controls.buttons,
@@ -298,6 +314,22 @@ mod tests {
                 ControlButton::Maximize
             ]
         );
+    }
+
+    #[test]
+    fn text_scale_is_clamped() {
+        let at = |v| {
+            merge(&RawSettings {
+                text_scale: Some(v),
+                ..Default::default()
+            })
+            .text_scale
+        };
+        assert_eq!(at(1.5), 1.5);
+        assert_eq!(at(0.1), 0.5);
+        assert_eq!(at(9.0), 3.0);
+        assert_eq!(at(f64::NAN), 1.0);
+        assert_eq!(merge(&RawSettings::default()).text_scale, 1.0);
     }
 
     #[test]

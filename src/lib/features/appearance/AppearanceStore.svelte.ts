@@ -45,7 +45,10 @@ export class AppearanceStore {
     if (!root) return;
     root.dataset.scheme = a.colorScheme;
     root.dataset.contrast = a.highContrast ? 'more' : 'normal';
-    root.dataset.motion = a.reducedMotion ? 'reduce' : 'full';
+    // D-031: never force 'full'; without the attribute the OS media query decides.
+    if (a.reducedMotion) root.dataset.motion = 'reduce';
+    else delete root.dataset.motion;
+    root.style.setProperty('--text-scale', String(a.textScale ?? 1));
     root.dataset.controls = a.controls.side;
     if (a.accent) {
       root.style.setProperty('--accent', a.accent);

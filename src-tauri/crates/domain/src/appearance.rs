@@ -93,14 +93,30 @@ impl fmt::Display for Rgb {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Appearance {
     pub color_scheme: ColorScheme,
     /// `None` means the default blue.
     pub accent: Option<Rgb>,
     pub high_contrast: bool,
     pub reduced_motion: bool,
+    /// GNOME text scaling factor, clamped to 0.5..=3.0. 1.0 is normal.
+    pub text_scale: f64,
     pub controls: WindowControls,
+}
+
+impl Appearance {
+    pub const TEXT_SCALE_MIN: f64 = 0.5;
+    pub const TEXT_SCALE_MAX: f64 = 3.0;
+
+    /// Clamp a raw factor; NaN becomes 1.0.
+    pub fn clamp_text_scale(v: f64) -> f64 {
+        if v.is_nan() {
+            1.0
+        } else {
+            v.clamp(Self::TEXT_SCALE_MIN, Self::TEXT_SCALE_MAX)
+        }
+    }
 }
 
 impl Default for Appearance {
@@ -110,6 +126,7 @@ impl Default for Appearance {
             accent: None,
             high_contrast: false,
             reduced_motion: false,
+            text_scale: 1.0,
             controls: WindowControls::default(),
         }
     }

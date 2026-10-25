@@ -1,5 +1,5 @@
 // Dev/e2e switches for the mock appearance gateway:
-//   ?side=left|right  ?buttons=close,minimize,maximize  ?scheme=dark|light
+//   ?textScale=1.25  ?side=left|right  ?buttons=close,minimize,maximize  ?scheme=dark|light
 import type { Appearance } from '../../core/domain/types';
 
 type ControlButton = Appearance['controls']['buttons'][number];
@@ -22,8 +22,11 @@ export function appearanceFromSearch(search: string, base: Appearance): Appearan
       buttons: picked.length > 0 ? picked : base.controls.buttons
     };
   }
+  const ts = Number(q.get('textScale'));
   return {
     ...base,
+    textScale:
+      Number.isFinite(ts) && ts >= 0.5 && ts <= 3 && q.has('textScale') ? ts : base.textScale,
     colorScheme: scheme === 'dark' || scheme === 'light' ? scheme : base.colorScheme,
     controls
   };

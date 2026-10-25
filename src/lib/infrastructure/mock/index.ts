@@ -123,6 +123,7 @@ export function createMockGateways(options: MockOptions = {}): MockGateways {
     accent: null,
     highContrast: false,
     reducedMotion: false,
+    textScale: 1,
     controls: { side: 'right', buttons: ['close'] }
   });
 
