@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { useControllers } from '$lib/app/context';
+  import { goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
+  import { useControllers, useGateways } from '$lib/app/context';
   import AppGrid from '$lib/features/library/AppGrid.svelte';
   import LibraryEmpty from '$lib/features/library/LibraryEmpty.svelte';
   import TrashConfirmAlert from '$lib/features/library/TrashConfirmAlert.svelte';
@@ -8,14 +10,26 @@
   import Toast from '$lib/ui/Toast.svelte';
   import { NOTICE_MS } from '$lib/features/library/LibraryController.svelte';
 
-  const { library } = useControllers();
+  const { library, installer } = useControllers();
+  const gateways = useGateways();
 
   $effect(() => {
     void library.load();
   });
 
-  function openPackage() {
-    // TODO(v2:S4b): FilesGateway.pickPackage(), then go to the installer with the chosen path.
+  // A package opened or dropped while the library is showing goes to the installer.
+  $effect(() => installer.start(() => void goto(resolve('/install'))));
+
+  async function openPackage() {
+    let path: string | null = null;
+    try {
+      path = await gateways.files.pickPackage();
+    } catch {
+      return;
+    }
+    if (!path) return; // dismissed chooser: nothing to do
+    installer.open(path);
+    await goto(resolve('/install'));
   }
 </script>
 
