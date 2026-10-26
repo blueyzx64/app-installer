@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use tauri::{DragDropEvent, Manager, WindowEvent};
 
-use crate::cli::validate_package_path;
+use crate::cli::{path_to_wire, validate_path};
 use crate::events;
 
 /// Windows that accept drops.
@@ -14,8 +14,8 @@ pub const DROP_WINDOWS: &[&str] = &["main", "library"];
 pub fn valid_drops(paths: &[PathBuf]) -> Vec<String> {
     paths
         .iter()
-        .filter_map(|p| validate_package_path(&p.to_string_lossy()).ok())
-        .map(|p| p.to_string_lossy().into_owned())
+        .filter_map(|p| validate_path(p).ok())
+        .map(|p| path_to_wire(&p))
         .collect()
 }
 

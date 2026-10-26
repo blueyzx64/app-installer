@@ -30,9 +30,36 @@ pub fn log_dir(env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
     Some(base.join(APP_ID).join("log"))
 }
 
-/// Replace the home dir with `~` and hide the user name in removable-media
-/// paths (`/run/media/<user>` becomes `/run/media/~`). Only whole paths match:
-/// see [`replace_path`].
+/// A char that can be part of a path component.
+fn is_path_char(c: char) -> bool {
+    c.is_alphanumeric() || matches!(c, '/' | '.' | '-' | '_')
+}
+
+/// Replace `needle` where it stands as a whole path: nothing path-like right
+/// before it, and the end, a `/` or a non-path char right after it.
+fn replace_whole(text: &str, needle: &str, with: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut last = 0;
+    for (i, _) in text.match_indices(needle) {
+        if i < last {
+            continue;
+        }
+        let before = text[..i].chars().next_back();
+        let after = text[i + needle.len()..].chars().next();
+        let left_ok = before.is_none_or(|c| !is_path_char(c));
+        let right_ok = after.is_none_or(|c| c == '/' || !is_path_char(c));
+        if left_ok && right_ok {
+            out.push_str(&text[last..i]);
+            out.push_str(with);
+            last = i + needle.len();
+        }
+    }
+    out.push_str(&text[last..]);
+    out
+}
+
+/// Hide personal data in a log line: the home directory becomes `~`, and the
+/// user name in removable-media mounts (`/run/media/<user>`) becomes `~`.
 pub fn redact(text: &str, home: Option<&str>) -> String {
     let Some(h) = home
         .map(|h| h.trim_end_matches('/'))
@@ -40,50 +67,21 @@ pub fn redact(text: &str, home: Option<&str>) -> String {
     else {
         return text.to_owned();
     };
-    let out = replace_path(text, h, "~");
-    match Path::new(h).file_name().and_then(|n| n.to_str()) {
-        Some(user) => replace_path(&out, &format!("/run/media/{user}"), "/run/media/~"),
-        None => out,
-    }
-}
-
-/// True for chars that can sit inside a path, so a match next to one is
-/// part of a longer path (`/var/home/sam`), not a path that starts there.
-fn is_path_char(c: char) -> bool {
-    c.is_alphanumeric() || "/._-~+@%".contains(c)
-}
-
-/// True for chars that continue one path component (`/home/sam` vs
-/// `/home/samuel`, `/home/sam.bak`). Anything else, '/' included, ends it.
-fn is_component_char(c: char) -> bool {
-    c.is_ascii_alphanumeric() || "._-".contains(c)
-}
-
-/// Replace each `needle` that starts a path (start of text, or after a
-/// non-path char such as space, quote, `=`, `:`, `(`) and ends a path
-/// component (end of text, or any char outside `[A-Za-z0-9._-]`).
-/// Single left-to-right pass; the output is never re-scanned.
-fn replace_path(text: &str, needle: &str, with: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut rest = text;
-    let mut prev: Option<char> = None;
-    while let Some(i) = rest.find(needle) {
-        let (head, tail) = rest.split_at(i);
-        let after = &tail[needle.len()..];
-        let left = head.chars().next_back().or(prev);
-        let left_ok = left.is_none_or(|c| !is_path_char(c));
-        let right_ok = after.chars().next().is_none_or(|c| !is_component_char(c));
-        out.push_str(head);
-        if left_ok && right_ok {
-            out.push_str(with);
-        } else {
-            out.push_str(needle);
+    let mut out = replace_whole(text, h, "~");
+    if let Some(user) = Path::new(h).file_name().and_then(|u| u.to_str()) {
+        for base in ["/run/media/", "/media/"] {
+            out = replace_whole(&out, &format!("{base}{user}"), &format!("{base}~"));
         }
-        prev = needle.chars().next_back();
-        rest = after;
     }
-    out.push_str(rest);
     out
+}
+
+/// A path for a log line, redacted with the real `$HOME`.
+pub fn redact_path(path: &Path) -> String {
+    redact(
+        &path.to_string_lossy(),
+        std::env::var("HOME").ok().as_deref(),
+    )
 }
 
 /// Stops writing after `cap` bytes (silently drops the rest).

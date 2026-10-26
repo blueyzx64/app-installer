@@ -50,7 +50,7 @@ where
     /// Errors: unreadable or damaged files, and files that are not a package at all
     /// (`Unsupported(UnknownFormat)`). Known-but-unsupported packages (AppImage
     /// type 1, DwarFS) succeed with `Compatibility::Unsupported` so the UI can explain.
-    #[tracing::instrument(skip(self), fields(path = %path.display()))]
+    #[tracing::instrument(skip(self, path))]
     pub async fn execute(&self, path: PathBuf) -> Result<PackagePreview, InspectError> {
         let head = self.probe.head(&path, SNIFF_LEN).await?;
         let file_name = path

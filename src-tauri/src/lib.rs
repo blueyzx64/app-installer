@@ -11,6 +11,7 @@ pub mod events;
 pub mod fallbacks;
 pub mod logging; // lane S11
 pub mod state;
+pub mod system_backend;
 
 use tauri::Manager;
 
@@ -18,7 +19,7 @@ pub fn run() {
     logging::init(); // lane S11
     let launch_file = std::env::current_dir()
         .ok()
-        .and_then(|cwd| cli::launch_path_from_argv(&std::env::args().collect::<Vec<_>>(), &cwd));
+        .and_then(|cwd| cli::launch_path_from_argv(&std::env::args_os().collect::<Vec<_>>(), &cwd));
     let specta = bindings::builder();
 
     tauri::Builder::default()

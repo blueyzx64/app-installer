@@ -63,9 +63,10 @@ installer-domain = { path = "crates/domain" }
 installer-application = { path = "crates/application" }
 installer-infrastructure = { path = "crates/infrastructure" }
 tauri-plugin-dialog = "2"
-tokio = { version = "1", features = ["time"] } # startup timeouts
+tokio = { version = "1", features = ["time", "sync"] } # startup timeouts, lazy backend switch
+zbus = { version = "5", default-features = false, features = ["tokio"] } # PackageKit liveness (D-040)
 
 [dev-dependencies]
 installer-application = { path = "crates/application", features = ["testing"] }
-tokio = { version = "1", features = ["rt", "macros"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "time"] }
 tempfile = "3"
