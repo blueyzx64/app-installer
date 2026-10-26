@@ -69,7 +69,8 @@ export function lumenPreview(
     sizeBytes: user ? 96_000_000 : format === 'deb' ? 48_000_000 : 52_000_000,
     scope: user ? 'user' : 'system',
     needsPermission: !user,
-    compat: { kind: 'ok' }
+    compat: { kind: 'ok' },
+    installedAppId: null
   };
   switch (scenario) {
     case 'incompatible-arch':

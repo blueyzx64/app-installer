@@ -23,7 +23,8 @@ const preview = (compat: PackagePreview['compat'] = { kind: 'ok' }): PackagePrev
   sizeBytes: 1,
   scope: 'system',
   needsPermission: true,
-  compat
+  compat,
+  installedAppId: null
 });
 const app: InstalledApp = {
   id: 'lumen',

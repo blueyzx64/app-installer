@@ -111,6 +111,8 @@ export type PackagePreview = {
 	scope: InstallScope,
 	needsPermission: boolean,
 	compat: Compatibility,
+	/**  v4: ledger id when this app is already installed, so "Open" can launch it. */
+	installedAppId: string | null,
 };
 
 export type Runtime = "fuse2";

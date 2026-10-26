@@ -190,6 +190,8 @@ pub struct PackagePreview {
     pub scope: InstallScope,
     pub needs_permission: bool,
     pub compat: Compatibility,
+    /// v4: ledger id when this app is already installed, so "Open" can launch it.
+    pub installed_app_id: Option<String>,
 }
 
 impl From<domain::PackagePreview> for PackagePreview {
@@ -206,6 +208,7 @@ impl From<domain::PackagePreview> for PackagePreview {
             scope: p.meta.scope.into(),
             needs_permission: p.needs_permission,
             compat: p.compat.into(),
+            installed_app_id: p.installed_app_id.map(|id| id.to_string()),
         }
     }
 }

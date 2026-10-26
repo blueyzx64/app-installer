@@ -49,6 +49,7 @@ interface PackagePreview {
   scope: InstallScope;
   needsPermission: boolean;        // scope === 'system'
   compat: Compatibility;
+  installedAppId: string | null;   // v4: ledger id when already installed (alreadyInstalled + in ledger), else null
 }
 
 type Compatibility =
