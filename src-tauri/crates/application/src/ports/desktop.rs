@@ -12,6 +12,10 @@ pub trait DesktopIntegration: Sync {
 
     /// Remove the entry and icons. Missing files are not an error.
     async fn remove_entry(&self, app: &InstalledApp) -> Result<(), InstallError>;
+
+    /// Whether the app's managed `.desktop` entry is in place, and (when `with_icon`) at
+    /// least one of its icons. Used to repair entries lost while the files were away.
+    async fn entry_intact(&self, app: &InstalledApp, with_icon: bool) -> bool;
 }
 
 #[trait_variant::make(Send)]

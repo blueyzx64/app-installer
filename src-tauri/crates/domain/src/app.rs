@@ -31,6 +31,9 @@ impl AppId {
     /// (CJK, Cyrillic, ...), a short stable hash of the whole name is appended
     /// (`app-1a2b3c4d` when nothing is left), so different names keep different ids.
     pub fn from_name(name: &str) -> AppId {
+        // NFC first, so a name typed as NFD ("A\u{30a}") gets the same id (D-038).
+        let name = nfc(name);
+        let name = name.as_str();
         let mut slug = String::with_capacity(name.len());
         let mut lossy = false;
         let sep = |slug: &mut String| {
@@ -72,6 +75,12 @@ impl AppId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+}
+
+/// NFC-normalised copy of `s` (D-038). Names and identity keys go through this.
+pub fn nfc(s: &str) -> String {
+    use unicode_normalization::UnicodeNormalization;
+    s.nfc().collect()
 }
 
 /// FNV-1a, 32 bit. Stable across runs and platforms (unlike `DefaultHasher`).
@@ -203,6 +212,15 @@ mod tests {
             );
             assert!(!once.as_str().starts_with('-') && !once.as_str().ends_with('-'));
         }
+    }
+
+    /// R3 proof (review_r3rv_slug_nfc_nfd_same_id): NFC and NFD spellings share an id.
+    #[test]
+    fn slug_nfc_nfd_same_id() {
+        let composed = "\u{c5}ngstr\u{f6}m";
+        let decomposed = "A\u{30a}ngstro\u{308}m";
+        assert_eq!(AppId::from_name(composed), AppId::from_name(decomposed));
+        assert_eq!(nfc(decomposed), composed);
     }
 
     #[test]

@@ -6,6 +6,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::app::AppId;
 use crate::compat::Compatibility;
 use crate::package::PackageMetadata;
 
@@ -67,6 +68,9 @@ pub struct PackagePreview {
     pub compat: Compatibility,
     /// Installing will ask for permission (system scope).
     pub needs_permission: bool,
+    /// The ledger id of this app when it is already installed (D-037 identity lookup);
+    /// `None` when not installed or not in the ledger.
+    pub installed_app_id: Option<AppId>,
 }
 
 #[cfg(test)]

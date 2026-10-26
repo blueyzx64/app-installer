@@ -30,8 +30,12 @@ pub const MAX_SYMLINK_DEPTH: usize = 8;
 const MAX_RUNTIME_BYTES: u64 = 8 * 1024 * 1024;
 /// Icons wider than this are scaled down.
 const MAX_ICON_PX: u32 = 256;
-/// Icons larger than this (per side, from the PNG header) are not decoded at all.
-const MAX_ICON_SOURCE_PX: u32 = 4096;
+/// PNG icons larger than this (per side, from the PNG header) are dropped.
+const MAX_ICON_SOURCE_PX: u32 = 1024;
+/// Above this size we do not decode or resize (too slow for opening a file); the PNG is
+/// kept as it is when it is small enough in bytes, else there is no icon.
+const MAX_DECODE_PX: u32 = 512;
+const MAX_PASSTHROUGH_BYTES: usize = 1024 * 1024;
 /// Text limits for fields that reach the UI.
 const MAX_NAME_CHARS: usize = 128;
 const MAX_COMMENT_CHARS: usize = 512;
@@ -96,7 +100,7 @@ pub fn inspect_path(path: &Path) -> Result<PackageMetadata, InspectError> {
         .map_err(|_| InspectError::Corrupt)?;
     let image = Image::new(&fs);
 
-    let (desktop_text, _) = image.root_desktop_entry().ok_or(InspectError::Corrupt)?;
+    let (desktop_text, desktop_path) = image.root_desktop_entry().ok_or(InspectError::Corrupt)?;
     let entry = parse_desktop_entry(&desktop_text);
     let file_stem = path
         .file_stem()
@@ -127,7 +131,7 @@ pub fn inspect_path(path: &Path) -> Result<PackageMetadata, InspectError> {
 
     Ok(PackageMetadata {
         format: PackageFormat::AppImage,
-        name: machine_name(&display_name),
+        name: identity_key(&desktop_path, &display_name),
         display_name,
         version: Version::new(version),
         arch: header.arch(),
@@ -139,12 +143,53 @@ pub fn inspect_path(path: &Path) -> Result<PackageMetadata, InspectError> {
 }
 
 /// "Lumen-Notes-1.2.3-x86_64" → "Lumen Notes" (name part before the first digit-led token).
-/// Machine name = slug of the display name. A name with letters outside ASCII (which the
-/// slug drops, so different apps could share one id) gets a short hash of the full name
-/// appended, e.g. `app-3fa9c1d2`.
+/// Identity key (D-037), stored as `PackageMetadata::name`: the embedded `.desktop` file
+/// stem when it looks like an application id (reverse-DNS, e.g. `org.foo.Bar`), else the
+/// machine name of the display name. Generic stems such as `app` or `a` say nothing about
+/// identity, so they are not used.
+pub fn identity_key(desktop_path: &Path, display_name: &str) -> String {
+    desktop_path
+        .file_stem()
+        .map(|s| s.to_string_lossy())
+        .and_then(|stem| desktop_stem_key(&stem))
+        .unwrap_or_else(|| machine_name(display_name))
+}
+
+/// A reverse-DNS-looking `.desktop` stem: `[A-Za-z0-9_-]` parts joined by dots, at least two
+/// parts, at most 128 chars. Anything else is `None`.
+pub fn desktop_stem_key(stem: &str) -> Option<String> {
+    let stem = installer_domain::nfc(stem.trim());
+    let parts: Vec<&str> = stem.split('.').collect();
+    let ok = stem.len() <= 128
+        && parts.len() >= 2
+        && parts.iter().all(|p| {
+            !p.is_empty()
+                && p.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+        });
+    ok.then_some(stem)
+}
+
+/// Machine name of a display name: its slug, plus a short stable hash of the NFC name
+/// unless the name already is that slug. So "Foo Bar" and "Foo-Bar", or two names that
+/// differ only in an emoji, never share a machine name (it decides "update of the same
+/// app"). Names the slug already hashes (CJK, ...) are not hashed twice.
 pub fn machine_name(display_name: &str) -> String {
-    // `AppId::from_name` already keeps non-ASCII names apart with a stable hash suffix (D-034).
-    AppId::from_name(display_name).as_str().to_owned()
+    let name = installer_domain::nfc(display_name);
+    let slug = AppId::from_name(&name);
+    let hash = format!("{:08x}", fnv1a32(&name));
+    if slug.as_str() == name || slug.as_str().ends_with(&format!("-{hash}")) {
+        return slug.as_str().to_owned();
+    }
+    let base: String = slug.as_str().chars().take(55).collect();
+    format!("{}-{hash}", base.trim_end_matches('-'))
+}
+
+/// FNV-1a, 32 bit (same function the domain slug uses for its hash suffix).
+fn fnv1a32(s: &str) -> u32 {
+    s.bytes().fold(0x811c_9dc5_u32, |h, b| {
+        (h ^ u32::from(b)).wrapping_mul(0x0100_0193)
+    })
 }
 
 fn name_from_file(stem: &str) -> String {
@@ -196,13 +241,14 @@ pub fn parse_desktop_entry(text: &str) -> HashMap<String, String> {
     out
 }
 
-/// One clean line for the UI: control characters (including ones made by `\n` escapes) and
-/// bidi overrides are dropped or turned into spaces, whitespace collapsed, length capped.
+/// One clean line for the UI: NFC (D-038); control characters (including ones made by `\n`
+/// escapes) become spaces; invisible format characters (bidi controls and marks, zero-width
+/// chars) are dropped; whitespace collapsed; length capped.
 fn clean_text(s: &str, max_chars: usize) -> String {
     let mut out = String::new();
-    for word in s
+    for word in installer_domain::nfc(s)
         .chars()
-        .filter(|c| !is_bidi_control(*c))
+        .filter(|c| !is_invisible_format(*c))
         .map(|c| if c.is_control() { ' ' } else { c })
         .collect::<String>()
         .split_whitespace()
@@ -222,8 +268,17 @@ fn clean_text(s: &str, max_chars: usize) -> String {
         .to_owned()
 }
 
-fn is_bidi_control(c: char) -> bool {
-    matches!(c, '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
+/// Format (Cf) characters that render as nothing or reorder text: bidi embeddings,
+/// overrides, isolates and marks (LRM, RLM, ALM), zero-width chars, BOM, soft hyphen.
+fn is_invisible_format(c: char) -> bool {
+    matches!(c,
+        '\u{00AD}' | '\u{061C}' | '\u{180E}'
+        | '\u{200B}'..='\u{200F}'
+        | '\u{202A}'..='\u{202E}'
+        | '\u{2060}'..='\u{2064}'
+        | '\u{2066}'..='\u{206F}'
+        | '\u{FEFF}'
+        | '\u{FFF9}'..='\u{FFFB}')
 }
 
 fn unescape(v: &str) -> String {
@@ -382,10 +437,17 @@ fn png_size(bytes: &[u8]) -> Option<(u32, u32)> {
     Some((w, h))
 }
 
+/// Size policy for PNG icons, from the header only (no decode):
+/// over 1024 px → none; over 512 px → kept as is when ≤ 1 MiB, else none;
+/// over 256 px → decoded and scaled to 256 px; else decoded once to check it.
 fn shrink_png(bytes: Vec<u8>) -> Option<Vec<u8>> {
     let (w, h) = png_size(&bytes)?;
-    if w == 0 || h == 0 || w > MAX_ICON_SOURCE_PX || h > MAX_ICON_SOURCE_PX {
+    let side = w.max(h);
+    if w == 0 || h == 0 || side > MAX_ICON_SOURCE_PX {
         return None;
+    }
+    if side > MAX_DECODE_PX {
+        return (bytes.len() <= MAX_PASSTHROUGH_BYTES).then_some(bytes);
     }
     let img = image::load_from_memory_with_format(&bytes, image::ImageFormat::Png).ok()?;
     if img.width() <= MAX_ICON_PX && img.height() <= MAX_ICON_PX {
@@ -394,7 +456,7 @@ fn shrink_png(bytes: Vec<u8>) -> Option<Vec<u8>> {
     let small = img.resize(
         MAX_ICON_PX,
         MAX_ICON_PX,
-        image::imageops::FilterType::Lanczos3,
+        image::imageops::FilterType::Triangle,
     );
     let mut out = std::io::Cursor::new(Vec::new());
     small.write_to(&mut out, image::ImageFormat::Png).ok()?;
@@ -517,7 +579,7 @@ mod tests {
         let (_d, p) = write_tmp(&build(basic()));
         let m = inspect_path(&p).unwrap();
         assert_eq!(m.display_name, "Lumen Notes");
-        assert_eq!(m.name, "lumen-notes");
+        assert_eq!(m.name, machine_name("Lumen Notes"));
         assert_eq!(m.version.as_str(), "1.4.2");
         assert_eq!(m.summary.as_deref(), Some("A tiny test app"));
         assert_eq!(m.arch, installer_domain::Arch::X86_64);
@@ -822,7 +884,14 @@ mod tests {
 
     #[test]
     fn machine_name_keeps_non_ascii_names_apart() {
-        assert_eq!(machine_name("Lumen Notes"), "lumen-notes");
+        assert!(machine_name("Lumen Notes").starts_with("lumen-notes-"));
+        assert_eq!(machine_name("lumen-notes"), "lumen-notes");
+        assert_ne!(machine_name("Foo Bar"), machine_name("Foo-Bar"));
+        assert_ne!(
+            machine_name("\u{1F3B5} Music"),
+            machine_name("\u{1F3AE} Music")
+        );
+        assert_eq!(machine_name("A\u{30a}"), machine_name("\u{c5}"));
         let a = machine_name("\u{65e5}\u{672c}\u{8a9e}");
         let b = machine_name("\u{4e2d}\u{6587}");
         assert_ne!(a, b);
@@ -856,7 +925,10 @@ mod tests {
             format: PackageFormat::AppImage,
             size_bytes: 1,
         };
-        assert_eq!(insp.inspect(&file).await.unwrap().name, "lumen-notes");
+        assert_eq!(
+            insp.inspect(&file).await.unwrap().name,
+            machine_name("Lumen Notes")
+        );
     }
 
     /// ADR-0005 belt and braces: this module and `elf.rs` never spawn processes.

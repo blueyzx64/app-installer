@@ -11,10 +11,10 @@ use std::time::UNIX_EPOCH;
 
 use installer_application::ports::UserApps;
 use installer_domain::{
-    AppId, AppSource, InstallError, InstalledApp, PackageFile, PackageMetadata,
+    AppId, AppSource, InstallError, InstalledApp, PackageFile, PackageMetadata, Version,
 };
 
-use crate::desktop_entries::{desktop_stem, io_to_install};
+use crate::desktop_entries::io_to_install;
 use crate::inspect::appimage::inspect_path;
 
 const COPY_BUF: usize = 1024 * 1024;
@@ -97,43 +97,59 @@ impl AppImageStore {
 
     fn scan_blocking(&self) -> Result<Vec<InstalledApp>, InstallError> {
         let root = self.canonical_root();
-        // A missing store is an empty store. Any other failure is an error, never "empty",
-        // so the library does not forget apps because of a read problem (D-035).
-        let dir = match fs::read_dir(&root) {
-            Ok(d) => d,
-            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
-            Err(e) => return Err(io_to_install(e)),
-        };
+        // A store we cannot read (missing, a link to an unmounted drive, no access) is an
+        // error, never "empty", so the library forgets nothing because of it (D-035, R10).
+        let dir = fs::read_dir(&root).map_err(io_to_install)?;
         let mut apps = Vec::new();
         for entry in dir.filter_map(Result::ok) {
             let path = entry.path();
             if !is_listed_name(&path) || !path.is_file() {
                 continue;
             }
-            // A file we cannot read as an AppImage is not one of ours; skip it quietly.
-            let Ok(meta) = inspect_path(&path) else {
-                continue;
-            };
             let installed_at = fs::metadata(&path)
                 .and_then(|m| m.modified())
                 .ok()
                 .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
                 .and_then(|d| i64::try_from(d.as_secs()).ok())
                 .unwrap_or(0);
-            let id = AppId::from_name(&meta.name);
-            apps.push(InstalledApp {
-                desktop_id: Some(format!("{}.desktop", desktop_stem(id.as_str()))),
-                id,
-                name: meta.name,
-                display_name: meta.display_name,
-                version: meta.version,
-                icon: meta.icon,
-                source: AppSource::AppImage,
-                installed_at,
-                path: Some(path),
-            });
+            // The id here is only provisional: the ledger owns ids and matches files by
+            // path (D-037). No desktop id either: only an install writes a menu entry.
+            let app = match inspect_path(&path) {
+                Ok(meta) => InstalledApp {
+                    id: AppId::from_name(&meta.display_name),
+                    name: meta.name,
+                    display_name: meta.display_name,
+                    version: meta.version,
+                    icon: meta.icon,
+                    source: AppSource::AppImage,
+                    installed_at,
+                    desktop_id: None,
+                    path: Some(path),
+                },
+                // Present but unreadable (damaged, newer format): listed with an empty key
+                // and version, so the caller keeps what it knows and records nothing new.
+                Err(e) => {
+                    tracing::warn!(error = %e, "AppImage in the store cannot be read");
+                    let stem = path
+                        .file_stem()
+                        .map(|s| s.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    InstalledApp {
+                        id: AppId::from_name(&stem),
+                        name: String::new(),
+                        display_name: stem,
+                        version: Version::new(""),
+                        icon: None,
+                        source: AppSource::AppImage,
+                        installed_at,
+                        desktop_id: None,
+                        path: Some(path),
+                    }
+                }
+            };
+            apps.push(app);
         }
-        apps.sort_by(|a, b| a.id.cmp(&b.id));
+        apps.sort_by(|a, b| a.path.cmp(&b.path));
         Ok(apps)
     }
 
@@ -307,7 +323,7 @@ mod tests {
     fn meta(name: &str) -> PackageMetadata {
         PackageMetadata {
             format: PackageFormat::AppImage,
-            name: AppId::from_name(name).as_str().to_owned(),
+            name: crate::inspect::appimage::machine_name(name),
             display_name: name.to_owned(),
             version: Version::new("1.0"),
             arch: Arch::X86_64,
@@ -401,16 +417,25 @@ mod tests {
         fs::write(root_dir.path().join("Junk.AppImage"), b"not an image").unwrap();
         let store = AppImageStore::new(root_dir.path()).with_trash(fake_trash);
         let apps = store.scan().await.unwrap();
-        let ids: Vec<_> = apps.iter().map(|a| a.id.as_str()).collect();
-        assert_eq!(ids, ["alpha", "beta"]);
+        // Sorted by path: A.appimage, B.AppImage, Junk.AppImage (unreadable: empty key).
+        let names: Vec<_> = apps.iter().map(|a| a.display_name.as_str()).collect();
+        assert_eq!(names, ["Alpha", "Beta", "Junk"]);
         assert_eq!(apps[1].version.as_str(), "2.1");
-        assert_eq!(
-            apps[0].desktop_id.as_deref(),
-            Some("io.github.blueyzx64.Installer.alpha.desktop")
+        assert!(!apps[0].name.is_empty() && apps[2].name.is_empty());
+        assert_eq!(apps[2].version.as_str(), "");
+        // Scan writes no menu entries, so it claims none.
+        assert!(apps.iter().all(|a| a.desktop_id.is_none()));
+        let root = fs::canonicalize(root_dir.path()).unwrap();
+        assert!(
+            apps.iter()
+                .all(|a| a.path.as_deref().unwrap().parent() == Some(root.as_path()))
         );
-        // Missing store is an empty list, not an error.
+        // Missing store (unmounted drive, deleted folder) is an error, not "no apps".
         let none = AppImageStore::new(root_dir.path().join("nope"));
-        assert!(none.scan().await.unwrap().is_empty());
+        assert!(none.scan().await.is_err());
+        let dangling = root_dir.path().join("link");
+        std::os::unix::fs::symlink(root_dir.path().join("unmounted"), &dangling).unwrap();
+        assert!(AppImageStore::new(&dangling).scan().await.is_err());
     }
 
     #[tokio::test]

@@ -412,9 +412,14 @@ pub struct FakeDesktop {
     install_err: Failure<InstallError>,
     remove_err: Failure<InstallError>,
     calls: Mutex<Vec<String>>,
+    missing: Mutex<Vec<AppId>>,
 }
 
 impl FakeDesktop {
+    /// Pretend the entry of `id` is gone (until the next `install_entry` for it).
+    pub fn set_missing(&self, id: &AppId) {
+        self.missing.lock().unwrap().push(id.clone());
+    }
     pub fn fail_install(&self, e: InstallError) {
         self.install_err.set(e);
     }
@@ -438,7 +443,12 @@ impl DesktopIntegration for FakeDesktop {
             .unwrap()
             .push(format!("install {}", app.id));
         self.install_err.check()?;
+        self.missing.lock().unwrap().retain(|m| m != &app.id);
         Ok(format!("io.installer.{}.desktop", app.id))
+    }
+
+    async fn entry_intact(&self, app: &InstalledApp, _with_icon: bool) -> bool {
+        !self.missing.lock().unwrap().contains(&app.id)
     }
 
     async fn remove_entry(&self, app: &InstalledApp) -> Result<(), InstallError> {

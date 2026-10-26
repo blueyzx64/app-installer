@@ -243,6 +243,7 @@ mod tests {
             meta: sample_meta(installer_domain::PackageFormat::AppImage),
             compat: installer_domain::Compatibility::Ok,
             needs_permission: false,
+            installed_app_id: None,
         });
         let uc = rig.uc().with_registry(registry.clone());
         let id = AppId::from_name("lumen");

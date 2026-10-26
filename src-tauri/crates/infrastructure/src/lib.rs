@@ -33,3 +33,6 @@ pub mod dnf5daemon;
 
 #[cfg(test)]
 mod review_r2; // lane S3 (R2 proof tests)
+
+#[cfg(test)]
+mod review_r2b; // lane S3 (R2 reverify proof tests)

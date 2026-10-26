@@ -246,6 +246,21 @@ impl DesktopIntegration for DesktopEntries {
             .await
             .map_err(|e| InstallError::Unknown(e.to_string()))?
     }
+
+    async fn entry_intact(&self, app: &InstalledApp, with_icon: bool) -> bool {
+        let (this, app) = (self.clone(), app.clone());
+        tokio::task::spawn_blocking(move || this.intact_blocking(&app, with_icon))
+            .await
+            .unwrap_or(true)
+    }
+}
+
+impl DesktopEntries {
+    fn intact_blocking(&self, app: &InstalledApp, with_icon: bool) -> bool {
+        let stem = desktop_stem(app.id.as_str());
+        let entry = self.applications_dir().join(format!("{stem}.desktop"));
+        entry.is_file() && (!with_icon || self.load_icon(app.id.as_str()).is_some())
+    }
 }
 
 /// `$XDG_DATA_HOME` if absolute, else `$HOME/.local/share`.
@@ -513,24 +528,72 @@ mod tests {
         assert!(de.install_entry(&rel, None).await.is_err());
     }
 
-    /// Validate with `desktop-file-validate` when it is installed (skipped otherwise).
+    /// Structural check of the generated entry (no external validator is run): one
+    /// `[Desktop Entry]` group, the required keys exactly once, no raw control characters,
+    /// and `Exec` that GIO parses back to the app path.
     #[tokio::test]
-    async fn generated_entry_validates() {
+    async fn generated_entry_is_well_formed() {
+        use gio::prelude::AppInfoExt;
         let dir = tempfile::tempdir().unwrap();
         let de = DesktopEntries::new(dir.path());
-        let a = app("Lumen Notes", "/home/u/Applications/Lumen Notes.AppImage");
+        let target = dir.path().join("Lumen \"Notes\" $x.AppImage");
+        fs::write(&target, b"x").unwrap();
+        fs::set_permissions(&target, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+        let a = app("Lumen\nNotes", target.to_str().unwrap());
         let id = de.install_entry(&a, None).await.unwrap();
-        let file = dir.path().join("applications").join(id);
-        match std::process::Command::new("desktop-file-validate")
-            .arg(&file)
-            .output()
-        {
-            Ok(out) => assert!(
-                out.status.success(),
-                "{}",
-                String::from_utf8_lossy(&out.stdout)
-            ),
-            Err(_) => eprintln!("desktop-file-validate not installed; skipped"),
+        let file = dir.path().join("applications").join(&id);
+        let text = fs::read_to_string(&file).unwrap();
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines[0], "[Desktop Entry]");
+        assert_eq!(text.matches("\n[").count(), 0, "one group only");
+        for key in [
+            "Type",
+            "Version",
+            "Name",
+            "Exec",
+            "TryExec",
+            "Icon",
+            "Terminal",
+            "X-Installer-Managed",
+            "X-Installer-Source",
+        ] {
+            let n = lines
+                .iter()
+                .filter(|l| l.split_once('=').map(|(k, _)| k) == Some(key))
+                .count();
+            assert_eq!(n, 1, "{key} in {text}");
         }
+        assert!(lines.iter().all(|l| l.starts_with('[') || l.contains('=')));
+        assert!(!text.chars().any(|c| c.is_control() && c != '\n'));
+        assert!(text.contains("Type=Application\n"));
+        assert!(text.contains("X-Installer-Managed=true\n"));
+        let info = gio_unix::DesktopAppInfo::from_filename(&file).expect("GIO loads it");
+        assert_eq!(info.name().as_str(), "Lumen\nNotes");
+        let cmd = info.commandline().unwrap().to_string_lossy().into_owned();
+        let argv = glib::shell_parse_argv(&cmd).unwrap();
+        assert_eq!(argv[0].to_string_lossy(), target.to_str().unwrap());
+    }
+
+    #[tokio::test]
+    async fn entry_intact_tracks_entry_and_icon() {
+        let dir = tempfile::tempdir().unwrap();
+        let de = DesktopEntries::new(dir.path());
+        let a = app("Lumen", "/home/u/Applications/Lumen.AppImage");
+        assert!(!de.entry_intact(&a, false).await);
+        de.install_entry(&a, Some(&png(64))).await.unwrap();
+        assert!(de.entry_intact(&a, true).await);
+        let icon = dir
+            .path()
+            .join("icons/hicolor/48x48/apps/io.github.blueyzx64.Installer.lumen.png");
+        fs::remove_file(icon).unwrap();
+        // 64 px source also wrote 128 (next size up); remove it too.
+        let _ = fs::remove_file(
+            dir.path()
+                .join("icons/hicolor/128x128/apps/io.github.blueyzx64.Installer.lumen.png"),
+        );
+        assert!(!de.entry_intact(&a, true).await);
+        assert!(de.entry_intact(&a, false).await);
+        de.remove_entry(&a).await.unwrap();
+        assert!(!de.entry_intact(&a, false).await);
     }
 }

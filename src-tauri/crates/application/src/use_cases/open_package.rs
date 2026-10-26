@@ -2,11 +2,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use installer_domain::{
-    AppId, Arch, Compatibility, InspectError, InstallScope, PackageFile, PackageFormat,
-    PackageMetadata, PackagePreview, SNIFF_LEN, UnsupportedReason, Version,
+    AppId, Arch, Compatibility, InspectError, InstallScope, InstalledApp, PackageFile,
+    PackageFormat, PackageMetadata, PackagePreview, SNIFF_LEN, UnsupportedReason, Version,
 };
 
 use crate::PreviewRegistry;
+use crate::identity;
 use crate::ports::{AppLedger, FileProbe, HostProbe, PackageInspector, SystemPackages};
 
 /// Read a package file and build the preview shown before installing.
@@ -67,15 +68,22 @@ where
         };
         let host = self.host.host();
 
-        let (meta, compat) = match self.inspector.inspect(&file).await {
+        let (meta, compat, installed_app_id) = match self.inspector.inspect(&file).await {
             Ok(meta) => {
-                let installed = self.installed_version(&meta).await;
+                let ledger = self.ledger_snapshot().await;
+                let known = identity::find(&ledger, identity::source_of(&meta), &meta.name);
+                let installed = self.installed_version(&meta, known).await;
                 let compat = Compatibility::evaluate(&meta, &host, installed.as_ref());
-                (meta, compat)
+                let installed_app_id = match compat {
+                    Compatibility::AlreadyInstalled { .. } => known.map(|a| a.id.clone()),
+                    _ => None,
+                };
+                (meta, compat, installed_app_id)
             }
             Err(InspectError::Unsupported(reason)) => (
                 placeholder(&file, &file_name),
                 Compatibility::Unsupported { reason },
+                None,
             ),
             Err(e) => return Err(e),
         };
@@ -87,12 +95,26 @@ where
             meta,
             compat,
             needs_permission,
+            installed_app_id,
         }))
     }
 
-    /// Where "already installed" is looked up depends on scope. A lookup failure is
+    /// The ledger, or empty when it cannot be read (open must not fail on it).
+    async fn ledger_snapshot(&self) -> Vec<InstalledApp> {
+        self.ledger.list().await.unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "ledger unreadable; assuming not installed");
+            Vec::new()
+        })
+    }
+
+    /// Where "already installed" is looked up depends on scope: the package manager for
+    /// system packages, the ledger identity (D-037) for AppImages. A lookup failure is
     /// not fatal: we assume "not installed" and the backend will sort it out.
-    async fn installed_version(&self, meta: &PackageMetadata) -> Option<Version> {
+    async fn installed_version(
+        &self,
+        meta: &PackageMetadata,
+        known: Option<&InstalledApp>,
+    ) -> Option<Version> {
         match meta.scope {
             InstallScope::System => match self.system.installed_version(&meta.name).await {
                 Ok(v) => v,
@@ -101,16 +123,7 @@ where
                     None
                 }
             },
-            InstallScope::User => {
-                let id = AppId::from_name(&meta.name);
-                match self.ledger.list().await {
-                    Ok(apps) => apps.into_iter().find(|a| a.id == id).map(|a| a.version),
-                    Err(e) => {
-                        tracing::warn!(error = %e, "ledger unreadable; assuming not installed");
-                        None
-                    }
-                }
-            }
+            InstallScope::User => known.map(|a| a.version.clone()),
         }
     }
 }
@@ -137,7 +150,7 @@ fn placeholder(file: &PackageFile, file_name: &str) -> PackageMetadata {
 mod tests {
     use super::*;
     use crate::testing::*;
-    use installer_domain::{BackendError, DistroFamily, InstallScope, VersionRelation};
+    use installer_domain::{AppSource, BackendError, DistroFamily, InstallScope, VersionRelation};
 
     struct Rig {
         probe: Arc<FakeFileProbe>,
@@ -261,6 +274,56 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[tokio::test]
+    async fn installed_app_id_comes_from_ledger_identity() {
+        let rig = Rig::new();
+        let path = PathBuf::from("/tmp/Lumen.AppImage");
+        rig.probe.add(&path, APPIMAGE_HEAD, 10);
+        rig.inspector.set_meta(sample_meta(PackageFormat::AppImage)); // key lumen-notes
+        // Same key, suffixed id: the id is the ledger's, not the recomputed slug.
+        let mut app = sample_app("lumen-notes-2", "1.0", AppSource::AppImage);
+        app.name = "lumen-notes".into();
+        rig.ledger.seed(app);
+        // Same key under another source is a different app.
+        rig.ledger
+            .seed(sample_app("other", "1.0", AppSource::SystemPackage));
+
+        let preview = rig.uc().execute(path).await.unwrap();
+        assert_eq!(
+            preview.installed_app_id.as_ref().map(AppId::as_str),
+            Some("lumen-notes-2")
+        );
+    }
+
+    #[tokio::test]
+    async fn installed_app_id_is_none_when_not_installed_or_not_in_ledger() {
+        let rig = Rig::new();
+        rig.probe.add(&rpm_path(), RPM_HEAD, 1);
+        rig.inspector.set_meta(sample_meta(PackageFormat::Rpm));
+        // Installed on the system, but not by us.
+        rig.system.set_installed("lumen-notes", "1.0");
+        let preview = rig.uc().execute(rpm_path()).await.unwrap();
+        assert!(matches!(
+            preview.compat,
+            Compatibility::AlreadyInstalled { .. }
+        ));
+        assert_eq!(preview.installed_app_id, None);
+        // Now in the ledger too.
+        rig.ledger
+            .seed(sample_app("lumen-notes", "1.0", AppSource::SystemPackage));
+        let preview = rig.uc().execute(rpm_path()).await.unwrap();
+        assert_eq!(
+            preview.installed_app_id.as_ref().map(AppId::as_str),
+            Some("lumen-notes")
+        );
+        // Fresh AppImage: not installed.
+        let rig = Rig::new();
+        let path = PathBuf::from("/tmp/Lumen.AppImage");
+        rig.probe.add(&path, APPIMAGE_HEAD, 10);
+        rig.inspector.set_meta(sample_meta(PackageFormat::AppImage));
+        assert_eq!(rig.uc().execute(path).await.unwrap().installed_app_id, None);
     }
 
     #[tokio::test]
