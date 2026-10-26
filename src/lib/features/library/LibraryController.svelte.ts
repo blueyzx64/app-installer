@@ -67,9 +67,15 @@ export class LibraryController {
       : t('library.removing', { app: s.app.displayName });
   });
 
-  /** Plain-language toast text for a failed removal. null = nothing to show. */
+  /** App that failed to open (toast). */
+  #launchFailedApp = $state<string | null>(null);
+
+  /** Plain-language toast text for a failed removal or open. null = nothing to show. */
   notice = $derived.by(() => {
     const s = this.state;
+    if (this.#launchFailedApp !== null && s.tag !== 'confirming' && s.tag !== 'removing') {
+      return t('library.launchFailed', { app: this.#launchFailedApp });
+    }
     if (s.tag === 'loading' || s.tag === 'confirming' || s.tag === 'removing') return null;
     if (!s.notice || this.#noticeApp === null) return null;
     return text(removeErrorCopy(s.notice.code, this.#noticeApp));
@@ -148,6 +154,7 @@ export class LibraryController {
   dismissNotice(): void {
     this.#clearNoticeTimer();
     this.#noticeApp = null;
+    this.#launchFailedApp = null;
     this.#dispatch({ type: 'DISMISS_NOTICE' });
   }
 
@@ -155,7 +162,11 @@ export class LibraryController {
     try {
       await this.#gw.library.launchApp(appId);
     } catch {
-      // Launch failures are silent in v1.
+      const app = this.apps.find((a) => a.id === appId);
+      if (!app) return;
+      this.#launchFailedApp = app.displayName;
+      this.#clearNoticeTimer();
+      this.#noticeTimer = setTimeout(() => this.dismissNotice(), NOTICE_MS);
     }
   }
 

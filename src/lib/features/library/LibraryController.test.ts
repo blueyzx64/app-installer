@@ -177,10 +177,21 @@ describe('LibraryController', () => {
     await p;
     expect(c.apps.map((a) => a.id)).toEqual(['orbit-player']);
   });
-  it('launch calls the gateway and swallows errors', async () => {
+  it('launch calls the gateway', async () => {
     const { c, gw } = await setup('rpm');
     await c.launch('pixel-draw');
-    await c.launch('nope');
     expect(gw.controls.launched).toEqual(['pixel-draw']);
+    expect(c.notice).toBeNull();
+  });
+  it('a failed open shows a plain toast that hides itself', async () => {
+    const { c, gw } = await setup('rpm');
+    gw.library.launchApp = () => Promise.reject({ code: 'unknown', detail: 'exec failed' });
+    await c.launch('pixel-draw');
+    expect(c.notice).toBe('Pixel Draw couldn’t be opened.');
+    await vi.advanceTimersByTimeAsync(NOTICE_MS + 10);
+    expect(c.notice).toBeNull();
+    await c.launch('pixel-draw');
+    c.dismissNotice();
+    expect(c.notice).toBeNull();
   });
 });

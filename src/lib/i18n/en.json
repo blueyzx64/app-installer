@@ -89,6 +89,7 @@
   "library.launch": "Open",
   "library.removing": "Removing {app}…",
   "library.grid": "Installed apps",
+  "library.launchFailed": "{app} couldn’t be opened.",
   "library.more": "More options for {app}",
   "library.menu": "Options for {app}",
   "library.empty.title": "No apps yet",
