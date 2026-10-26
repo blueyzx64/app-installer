@@ -53,10 +53,16 @@ fn is_path_char(c: char) -> bool {
     c.is_alphanumeric() || "/._-~+@%".contains(c)
 }
 
+/// True for chars that continue one path component (`/home/sam` vs
+/// `/home/samuel`, `/home/sam.bak`). Anything else, '/' included, ends it.
+fn is_component_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || "._-".contains(c)
+}
+
 /// Replace each `needle` that starts a path (start of text, or after a
 /// non-path char such as space, quote, `=`, `:`, `(`) and ends a path
-/// component (end of text or `/`). Single left-to-right pass; the output is
-/// never re-scanned.
+/// component (end of text, or any char outside `[A-Za-z0-9._-]`).
+/// Single left-to-right pass; the output is never re-scanned.
 fn replace_path(text: &str, needle: &str, with: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut rest = text;
@@ -66,7 +72,7 @@ fn replace_path(text: &str, needle: &str, with: &str) -> String {
         let after = &tail[needle.len()..];
         let left = head.chars().next_back().or(prev);
         let left_ok = left.is_none_or(|c| !is_path_char(c));
-        let right_ok = after.is_empty() || after.starts_with('/');
+        let right_ok = after.chars().next().is_none_or(|c| !is_component_char(c));
         out.push_str(head);
         if left_ok && right_ok {
             out.push_str(with);
