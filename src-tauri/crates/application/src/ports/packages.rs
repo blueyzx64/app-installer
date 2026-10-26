@@ -51,6 +51,10 @@ pub trait UserApps: Sync {
     /// Move the app file to the Trash (recoverable).
     async fn trash(&self, app: &InstalledApp) -> Result<(), InstallError>;
 
-    /// Apps found in the store that we manage.
+    /// Every app file in the store, with its path (canonical), identity key (`name`) and
+    /// version read from the file. Ids are provisional: the ledger owns ids and matches
+    /// entries to files by path (D-037). A file that exists but cannot be read is listed
+    /// with an empty `name` and version, so callers keep what they know about it.
+    /// `Err` only when the store itself cannot be read; a missing store is empty.
     async fn scan(&self) -> Result<Vec<InstalledApp>, InstallError>;
 }

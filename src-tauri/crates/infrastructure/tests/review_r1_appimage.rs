@@ -483,6 +483,24 @@ fn review_r1_rv_icon_at_cap_cost() {
     let m = inspect_path(&p).unwrap();
     let el = t.elapsed();
     eprintln!("4096px icon inspect (debug build): {el:?}");
-    let (w, h) = png_dims(&m.icon.unwrap().bytes);
-    assert!(w <= 256 && h <= 256);
+    // fix3 policy: over 1024 px there is no icon at all (nothing decoded).
+    assert!(m.icon.is_none(), "4096 px icon kept");
+    // 1024 px: not decoded, kept as is (small file); 512 px: decoded, scaled to 256.
+    for (side, want_max) in [(1024u32, 1024u32), (512, 256)] {
+        let img = image::RgbaImage::from_pixel(side, side, image::Rgba([1, 2, 3, 255]));
+        let mut c = Cursor::new(Vec::new());
+        img.write_to(&mut c, image::ImageFormat::Png).unwrap();
+        let (_d, p) = tmp(
+            &image(vec![
+                ("/a.desktop", desk("A")),
+                ("/.DirIcon", c.into_inner()),
+            ]),
+            "x.AppImage",
+        );
+        let t = Instant::now();
+        let m = inspect_path(&p).unwrap();
+        eprintln!("{side}px icon inspect (debug build): {:?}", t.elapsed());
+        let (w, h) = png_dims(&m.icon.unwrap().bytes);
+        assert!(w <= want_max && h <= want_max, "{side}: {w}x{h}");
+    }
 }

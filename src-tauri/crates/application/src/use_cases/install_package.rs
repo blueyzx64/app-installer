@@ -2,9 +2,10 @@ use std::sync::Arc;
 
 use installer_domain::{
     AppId, AppSource, Compatibility, InstallError, InstallOutcome, InstallPhase, InstallProgress,
-    InstallScope, InstalledApp, PreviewId,
+    InstallScope, InstalledApp, PackageMetadata, PreviewId,
 };
 
+use crate::identity;
 use crate::ports::{
     AppLedger, Clock, DesktopIntegration, InstallObserver, SystemPackages, UserApps,
 };
@@ -83,7 +84,7 @@ where
         check_cancel(cancel)?;
 
         let mut app = InstalledApp {
-            id: self.free_id(&meta.name).await,
+            id: self.allocate_id(meta).await,
             name: meta.name.clone(),
             display_name: meta.display_name.clone(),
             version: meta.version.clone(),
@@ -145,31 +146,23 @@ where
 {
     /// Slug for `name`. If the ledger holds that slug for a different app,
     /// append `-2`, `-3`, ... until it is free. The same app keeps its id (updates).
-    async fn free_id(&self, name: &str) -> AppId {
-        let base = AppId::from_name(name);
-        let taken = match self.ledger.list().await {
+    /// D-037: same `(source, key)` in the ledger → its id (an update); else the display
+    /// name's slug, suffixed while any ledger entry holds it. If the ledger cannot be read,
+    /// the plain slug.
+    async fn allocate_id(&self, meta: &PackageMetadata) -> AppId {
+        let apps = match self.ledger.list().await {
             Ok(apps) => apps,
             Err(e) => {
                 tracing::warn!(error = %e, "could not read ledger for id check");
-                return base;
+                Vec::new()
             }
         };
-        let free = |id: &AppId| taken.iter().all(|a| &a.id != id || a.name == name);
-        if free(&base) {
-            return base;
-        }
-        for n in 2_u32.. {
-            let suffix = format!("-{n}");
-            let room = 64 - suffix.len();
-            let stem: String = base.as_str().chars().take(room).collect();
-            let candidate = format!("{}{suffix}", stem.trim_end_matches('-'));
-            if let Ok(id) = candidate.parse::<AppId>()
-                && free(&id)
-            {
-                return id;
-            }
-        }
-        base
+        identity::allocate(
+            &apps,
+            identity::source_of(meta),
+            &meta.name,
+            &meta.display_name,
+        )
     }
 }
 

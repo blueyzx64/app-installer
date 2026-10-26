@@ -54,7 +54,7 @@ impl World {
             tempfile::tempdir().unwrap(),
             tempfile::tempdir().unwrap(),
         );
-        let w = World {
+        World {
             src: s.path().to_path_buf(),
             data: d.path().to_path_buf(),
             store: Arc::new(AppImageStore::new(r.path()).with_trash(trash)),
@@ -63,8 +63,7 @@ impl World {
             system: Arc::new(FakeSystemPackages::default()),
             registry: Arc::new(PreviewRegistry::new()),
             _dirs: vec![s, r, d],
-        };
-        w
+        }
     }
 
     async fn install(&self, file_name: &str, display: &str) -> InstallOutcome {
