@@ -78,19 +78,22 @@ export function lumenPreview(
     case 'already-installed':
       return {
         ...base,
-        compat: { kind: 'alreadyInstalled', relation: 'same', installedVersion: LUMEN_VERSION }
+        compat: { kind: 'alreadyInstalled', relation: 'same', installedVersion: LUMEN_VERSION },
+        installedAppId: LUMEN_ID
       };
     case 'older-installed':
       return {
         ...base,
-        compat: { kind: 'alreadyInstalled', relation: 'older', installedVersion: '2.5.0' }
+        compat: { kind: 'alreadyInstalled', relation: 'older', installedVersion: '2.5.0' },
+        installedAppId: LUMEN_ID
       };
     case 'wrong-family':
       return { ...base, compat: { kind: 'wrongFamily', madeFor: 'debBased' } };
     case 'update':
       return {
         ...base,
-        compat: { kind: 'alreadyInstalled', relation: 'newer', installedVersion: '2.3.0' }
+        compat: { kind: 'alreadyInstalled', relation: 'newer', installedVersion: '2.3.0' },
+        installedAppId: LUMEN_ID
       };
     case 'missing-fuse2':
       return { ...base, compat: { kind: 'missingRuntime', what: 'fuse2' } };
