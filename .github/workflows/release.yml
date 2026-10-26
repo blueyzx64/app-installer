@@ -4,11 +4,15 @@ name: Release
 on:
   push:
     tags: ['v*']
+  # Manual run: builds the current commit and creates the tag v<Cargo version> on it.
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 env:
+  # Tag push: the tag itself. Manual run: v<Cargo version>, created by the publish job.
+  RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || '' }}
   CARGO_TERM_COLOR: always
   PNPM_VERSION: '10.28.0'
 
@@ -16,6 +20,8 @@ jobs:
   build:
     name: Build RPM and AppImage (fedora:44)
     runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
     # Oldest supported release: fixes the glibc and WebKitGTK floor (ADR-0008).
     container: fedora:44
     env:
@@ -33,9 +39,12 @@ jobs:
             desktop-file-utils appstream
       - uses: actions/checkout@v4.2.2
       - name: Check tag matches Cargo version
+        id: version
         run: |
           version=$(sed -n 's/^version *= *"\(.*\)"/\1/p' src-tauri/Cargo.toml | head -n1)
-          test "v${version}" = "${GITHUB_REF_NAME}" || { echo "tag ${GITHUB_REF_NAME} != Cargo version v${version}"; exit 1; }
+          tag="${RELEASE_TAG:-v${version}}"
+          test "v${version}" = "${tag}" || { echo "tag ${tag} != Cargo version v${version}"; exit 1; }
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
       - name: Install pnpm
         run: npm install --global pnpm@${PNPM_VERSION}
       - name: Install Rust toolchain
@@ -130,6 +139,8 @@ jobs:
           path: bundles
       - uses: softprops/action-gh-release@v2.2.2
         with:
+          tag_name: ${{ needs.build.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           draft: false
           # Not yet verified on real Fedora 45 hardware (docs/VERIFICATION.md).
           prerelease: true
