@@ -19,7 +19,6 @@ import {
   type InstallerEvent,
   type InstallerState
 } from '$lib/core/domain/installer-machine';
-import { appIdFromName } from '$lib/core/domain/app-id';
 import { formatBytes, BIG_DOWNLOAD_BYTES } from '$lib/core/domain/format';
 import {
   toCommandError,
@@ -140,7 +139,12 @@ export class InstallerController {
     if (s.tag !== 'incompatible') return null;
     const c = compatCopy(s.preview.compat, s.preview.displayName);
     return c
-      ? { title: text(c.title), body: c.body ? text(c.body) : null, action: c.action }
+      ? {
+          title: text(c.title),
+          body: c.body ? text(c.body) : null,
+          // Open needs the installed app's id from the backend (v4); without it, hide Open.
+          action: c.action === 'open' && s.preview.installedAppId === null ? null : c.action
+        }
       : null;
   });
 
@@ -240,23 +244,13 @@ export class InstallerController {
     this.#launchThenClose(s.app.id);
   }
 
-  /** Incompatible (already installed, same version) "Open". */
+  /** Incompatible (already installed, same version) "Open": uses the backend's installedAppId. */
   openInstalled(): void {
     const s = this.state;
     if (s.tag !== 'incompatible' || this.launching) return;
-    // The installed app's id comes from the package name (same rule as the Rust side).
-    const id = appIdFromName(s.preview.name);
-    this.launching = true;
-    this.#gw.library
-      .listInstalled()
-      .then((apps) => {
-        const app = apps.find((a) => a.id === id);
-        if (app?.canLaunch) this.#launchThenClose(app.id);
-        else this.launching = false;
-      })
-      .catch(() => {
-        this.launching = false;
-      });
+    const id = s.preview.installedAppId;
+    if (id === null) return;
+    this.#launchThenClose(id);
   }
 
   #launchThenClose(appId: string): void {

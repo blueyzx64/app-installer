@@ -249,13 +249,44 @@ describe('InstallerController', () => {
     expect(c.state.tag).toBe('ready');
   });
 
-  it('openInstalled launches by id from the package name', async () => {
-    const { c, gw } = await setup('already-installed');
+  it.each([
+    { name: 'notepad++', displayName: 'Notepad++', id: 'notepad-plus-plus' },
+    { name: 'café-reader', displayName: 'Café Reader', id: 'cafe-reader' }
+  ])(
+    'Open uses installedAppId from the backend ($displayName)',
+    async ({ name, displayName, id }) => {
+      const gw = createMockGateways({ scenario: 'already-installed', launchFile: null });
+      const real = gw.installer.openPackage.bind(gw.installer);
+      gw.installer.openPackage = async (path) => ({
+        ...(await real(path)),
+        name,
+        displayName,
+        installedAppId: id
+      });
+      const launch = vi.spyOn(gw.library, 'launchApp').mockResolvedValue();
+      const c = new InstallerController(gw);
+      c.open('/x.rpm');
+      await settle(300);
+      expect(c.incompatible?.action).toBe('open');
+      c.openInstalled();
+      await settle(50);
+      expect(launch).toHaveBeenCalledWith(id);
+    }
+  );
+
+  it('no installedAppId: Open is hidden and does nothing', async () => {
+    const gw = createMockGateways({ scenario: 'already-installed', launchFile: null });
+    const real = gw.installer.openPackage.bind(gw.installer);
+    gw.installer.openPackage = async (path) => ({ ...(await real(path)), installedAppId: null });
+    const launch = vi.spyOn(gw.library, 'launchApp');
+    const c = new InstallerController(gw);
+    c.open('/x.rpm');
+    await settle(300);
+    expect(c.incompatible?.action).toBeNull();
     c.openInstalled();
     await settle(50);
-    expect(gw.controls.launched).toEqual(['lumen-notes']);
-    await settle(OPEN_APP_CLOSE_MS);
-    expect(c.state.tag).toBe('idle');
+    expect(launch).not.toHaveBeenCalled();
+    expect(c.launching).toBe(false);
   });
 
   it('cancel() works while downloading (allowCancel) and not once installing', async () => {
