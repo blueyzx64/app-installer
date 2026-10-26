@@ -3,7 +3,15 @@
 //! A path reaches the backend only from argv, single-instance forwarding, a
 //! file chooser or a drop event. Every one of them goes through
 //! `validate_package_path` (ARCHITECTURE §12).
+//!
+//! Wire form of a path (IPC carries strings): a UTF-8 path is sent as is. A
+//! path that is not valid UTF-8 is sent as a `file://` URI with every byte
+//! outside the safe set percent-encoded, and `validate_package_path` decodes
+//! it again. So argv, drop and chooser paths stay lossless end to end, with no
+//! server-side state.
 
+use std::ffi::OsStr;
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
 use crate::error::{CommandError, ErrorCode};
@@ -15,9 +23,11 @@ pub const MAX_PACKAGE_BYTES: u64 = 8 * 1024 * 1024 * 1024;
 /// First path argument after the program name, if any.
 /// Flags (`-x`) and empty arguments are skipped. Everything after `--` is a
 /// path, so a file name that starts with a dash can still be opened.
-pub fn file_from_argv(argv: &[String]) -> Option<PathBuf> {
+/// Takes `OsString`s (from `std::env::args_os`) or `String`s.
+pub fn file_from_argv<S: AsRef<OsStr>>(argv: &[S]) -> Option<PathBuf> {
     let mut only_paths = false;
     for arg in argv.iter().skip(1) {
+        let arg = arg.as_ref();
         if arg.is_empty() {
             continue;
         }
@@ -25,17 +35,40 @@ pub fn file_from_argv(argv: &[String]) -> Option<PathBuf> {
             only_paths = true;
             continue;
         }
-        if only_paths || !arg.starts_with('-') {
+        if only_paths || !arg.as_bytes().starts_with(b"-") {
             return Some(PathBuf::from(arg));
         }
     }
     None
 }
 
+/// Path to its wire string (see the module doc). Lossless.
+pub fn path_to_wire(path: &Path) -> String {
+    match path.to_str() {
+        Some(s) if !s.starts_with("file://") => s.to_owned(),
+        _ => {
+            let mut out = String::from("file://");
+            for &b in path.as_os_str().as_bytes() {
+                if b.is_ascii_alphanumeric() || b"/._-~".contains(&b) {
+                    out.push(b as char);
+                } else {
+                    out.push_str(&format!("%{b:02X}"));
+                }
+            }
+            out
+        }
+    }
+}
+
+/// Wire string back to a path. Plain paths pass through.
+pub fn wire_to_path(raw: &str) -> PathBuf {
+    decode_file_uri(PathBuf::from(raw))
+}
+
 /// `file:///a%20b` to `/a b`. Anything that is not a local `file://` URI is
 /// returned unchanged.
 fn decode_file_uri(raw: PathBuf) -> PathBuf {
-    use std::os::unix::ffi::{OsStrExt, OsStringExt};
+    use std::os::unix::ffi::OsStringExt;
 
     let bytes = raw.as_os_str().as_bytes();
     let Some(rest) = bytes.strip_prefix(b"file://") else {
@@ -72,7 +105,7 @@ fn decode_file_uri(raw: PathBuf) -> PathBuf {
 /// second launch). A path that cannot be canonicalised stays absolute but
 /// unresolved, so `open_package` reports `notFound` instead of the file
 /// silently vanishing.
-pub fn launch_path_from_argv(argv: &[String], cwd: &Path) -> Option<PathBuf> {
+pub fn launch_path_from_argv<S: AsRef<OsStr>>(argv: &[S], cwd: &Path) -> Option<PathBuf> {
     let raw = decode_file_uri(file_from_argv(argv)?);
     let absolute = if raw.is_absolute() {
         raw
@@ -84,15 +117,20 @@ pub fn launch_path_from_argv(argv: &[String], cwd: &Path) -> Option<PathBuf> {
 
 /// What the single-instance callback should do with a second launch's argv.
 /// `None` means "just focus the window".
-pub fn open_file_payload(argv: &[String], cwd: &Path) -> Option<OpenFilePayload> {
+pub fn open_file_payload<S: AsRef<OsStr>>(argv: &[S], cwd: &Path) -> Option<OpenFilePayload> {
     launch_path_from_argv(argv, cwd).map(|p| OpenFilePayload {
-        path: p.to_string_lossy().into_owned(),
+        path: path_to_wire(&p),
     })
 }
 
-/// Canonicalise, require a regular file of at most 8 GiB, and refuse `/proc` and `/dev`.
+/// [`validate_path`] for a wire string from the frontend.
 pub fn validate_package_path(raw: &str) -> Result<PathBuf, CommandError> {
-    let path = Path::new(raw)
+    validate_path(&wire_to_path(raw))
+}
+
+/// Canonicalise, require a regular file of at most 8 GiB, and refuse `/proc` and `/dev`.
+pub fn validate_path(raw: &Path) -> Result<PathBuf, CommandError> {
+    let path = raw
         .canonicalize()
         .map_err(|e| CommandError::new(ErrorCode::NotFound, e.to_string()))?;
     if path.starts_with("/proc") || path.starts_with("/dev") {
@@ -175,6 +213,29 @@ mod tests {
             decode_file_uri(PathBuf::from("file://host/x")),
             PathBuf::from("file://host/x")
         );
+    }
+
+    #[test]
+    fn wire_round_trips_non_utf8_and_plain() {
+        for raw in [
+            &b"/tmp/caf\xe9 x%.rpm"[..],
+            b"/tmp/a b.rpm",
+            b"/tmp/file://odd",
+        ] {
+            let p = PathBuf::from(OsStr::from_bytes(raw));
+            assert_eq!(wire_to_path(&path_to_wire(&p)), p, "{raw:?}");
+        }
+        assert_eq!(path_to_wire(Path::new("/tmp/a b.rpm")), "/tmp/a b.rpm");
+    }
+
+    #[test]
+    fn argv_os_with_invalid_utf8_does_not_panic() {
+        let argv = [
+            std::ffi::OsString::from("installer"),
+            OsStr::from_bytes(b"\xff.rpm").to_owned(),
+        ];
+        let p = launch_path_from_argv(&argv, Path::new("/zzz")).unwrap();
+        assert_eq!(p.as_os_str().as_bytes(), b"/zzz/\xff.rpm");
     }
 
     #[test]

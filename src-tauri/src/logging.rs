@@ -30,29 +30,58 @@ pub fn log_dir(env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
     Some(base.join(APP_ID).join("log"))
 }
 
-/// Replace every occurrence of `home` in `text` with `~`.
-pub fn redact(text: &str, home: Option<&str>) -> String {
-    match home.map(|h| h.trim_end_matches('/')) {
-        Some(h) if !h.is_empty() => {
-            let mut out = String::with_capacity(text.len());
-            let mut rest = text;
-            while let Some(i) = rest.find(h) {
-                let (head, tail) = rest.split_at(i);
-                let after = &tail[h.len()..];
-                out.push_str(head);
-                // Only a whole path component counts: `/home/sam`, not `/home/samuel`.
-                if after.is_empty() || after.starts_with('/') {
-                    out.push('~');
-                } else {
-                    out.push_str(h);
-                }
-                rest = after;
-            }
-            out.push_str(rest);
-            out
+/// A char that can be part of a path component.
+fn is_path_char(c: char) -> bool {
+    c.is_alphanumeric() || matches!(c, '/' | '.' | '-' | '_')
+}
+
+/// Replace `needle` where it stands as a whole path: nothing path-like right
+/// before it, and the end, a `/` or a non-path char right after it.
+fn replace_whole(text: &str, needle: &str, with: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut last = 0;
+    for (i, _) in text.match_indices(needle) {
+        if i < last {
+            continue;
         }
-        _ => text.to_owned(),
+        let before = text[..i].chars().next_back();
+        let after = text[i + needle.len()..].chars().next();
+        let left_ok = before.is_none_or(|c| !is_path_char(c));
+        let right_ok = after.is_none_or(|c| c == '/' || !is_path_char(c));
+        if left_ok && right_ok {
+            out.push_str(&text[last..i]);
+            out.push_str(with);
+            last = i + needle.len();
+        }
     }
+    out.push_str(&text[last..]);
+    out
+}
+
+/// Hide personal data in a log line: the home directory becomes `~`, and the
+/// user name in removable-media mounts (`/run/media/<user>`) becomes `~`.
+pub fn redact(text: &str, home: Option<&str>) -> String {
+    let Some(h) = home
+        .map(|h| h.trim_end_matches('/'))
+        .filter(|h| !h.is_empty())
+    else {
+        return text.to_owned();
+    };
+    let mut out = replace_whole(text, h, "~");
+    if let Some(user) = Path::new(h).file_name().and_then(|u| u.to_str()) {
+        for base in ["/run/media/", "/media/"] {
+            out = replace_whole(&out, &format!("{base}{user}"), &format!("{base}~"));
+        }
+    }
+    out
+}
+
+/// A path for a log line, redacted with the real `$HOME`.
+pub fn redact_path(path: &Path) -> String {
+    redact(
+        &path.to_string_lossy(),
+        std::env::var("HOME").ok().as_deref(),
+    )
 }
 
 /// Stops writing after `cap` bytes (silently drops the rest).

@@ -3,7 +3,7 @@
 use tauri::AppHandle;
 use tauri_plugin_dialog::DialogExt;
 
-use crate::cli::validate_package_path;
+use crate::cli::{path_to_wire, validate_path};
 use crate::error::{CommandError, ErrorCode};
 
 /// Extensions shown by the chooser (portals can be case-sensitive, so list both spellings).
@@ -27,6 +27,6 @@ pub async fn pick_package(app: AppHandle) -> Result<Option<String>, CommandError
     let path = picked
         .into_path()
         .map_err(|e| CommandError::new(ErrorCode::NotFound, e.to_string()))?;
-    let canonical = validate_package_path(&path.to_string_lossy())?;
-    Ok(Some(canonical.to_string_lossy().into_owned()))
+    let canonical = validate_path(&path)?;
+    Ok(Some(path_to_wire(&canonical)))
 }
