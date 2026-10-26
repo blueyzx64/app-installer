@@ -1,4 +1,4 @@
-# F-62 build + smoke + draft release. F-64 signing runs only when secrets exist.
+# F-62 build + smoke + pre-release. F-64 signing runs only when secrets exist.
 name: Release
 
 on:
@@ -118,7 +118,7 @@ jobs:
           grep -Eq '^Exec=.* %f$' "$desktop"
 
   publish:
-    name: Draft GitHub Release
+    name: Publish GitHub pre-release
     needs: [build, smoke]
     runs-on: ubuntu-24.04
     permissions:
@@ -130,7 +130,9 @@ jobs:
           path: bundles
       - uses: softprops/action-gh-release@v2.2.2
         with:
-          draft: true
+          draft: false
+          # Not yet verified on real Fedora 45 hardware (docs/VERIFICATION.md).
+          prerelease: true
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: |
